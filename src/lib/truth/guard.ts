@@ -125,11 +125,12 @@ function buildCorpus(facts: ResumeFacts, rawResumeText: string) {
   return normalize([...index.values()].join(" \n ") + " \n " + rawResumeText);
 }
 
-function techTermsIn(text: string): string[] {
+function techTermsIn(text: string, vocabulary: string[]): string[] {
   const hay = normalize(text);
   const found = new Set<string>();
-  for (const term of TECH_VOCABULARY) {
+  for (const term of vocabulary) {
     const t = normalize(term);
+    if (t.length < 2) continue;
     // Word-ish boundary: the term must not be glued to surrounding letters.
     const re = new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`);
     if (re.test(hay)) found.add(canonical(term));
@@ -137,15 +138,30 @@ function techTermsIn(text: string): string[] {
   return [...found];
 }
 
+/**
+ * The built-in list is a floor, not a ceiling — it cannot know about whatever
+ * shipped last quarter. Seeding it with the job description's own vocabulary
+ * means the terms this particular application will be judged on are always
+ * covered, which is exactly where an invented claim would be most tempting.
+ */
+function buildVocabulary(jdTerms: string[]): string[] {
+  const extra = jdTerms
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && t.length <= 40 && /[a-z]/i.test(t));
+  return [...new Set([...TECH_VOCABULARY, ...extra])];
+}
+
 export function runTruthGuard(
   tailored: TailoredResume,
   facts: ResumeFacts,
   rawResumeText: string,
+  jdTerms: string[] = [],
 ): TruthReport {
   const violations: TruthViolation[] = [];
   const factIndex = buildFactIndex(facts);
   const corpus = buildCorpus(facts, rawResumeText);
-  const corpusTech = new Set(techTermsIn(corpus));
+  const vocabulary = buildVocabulary(jdTerms);
+  const corpusTech = new Set(techTermsIn(corpus, vocabulary));
   const corpusDigits = new Set(extractMetrics(corpus).map(digitsOf).filter(Boolean));
 
   const checkLine = (location: string, text: string, sourceIds: string[]) => {
@@ -190,7 +206,7 @@ export function runTruthGuard(
       }
     }
 
-    for (const tech of techTermsIn(text)) {
+    for (const tech of techTermsIn(text, vocabulary)) {
       if (!corpusTech.has(tech)) {
         violations.push({
           code: "UNSOURCED_TECH",
@@ -204,7 +220,17 @@ export function runTruthGuard(
   };
 
   checkLine("Summary", tailored.summary.text, tailored.summary.sourceIds);
-  checkLine("Headline", tailored.headline, ["HEADLINE", ...facts.experience.map((e) => e.id)]);
+
+  // A headline speaks for the candidate's current level and claimed stack, so
+  // it may draw on the most recent role and the skills section — not, as it
+  // once did, on every role ever held, which let it borrow a technology from a
+  // job three years ago and call it a specialisation.
+  const headlineSources = [
+    "HEADLINE",
+    facts.experience[0]?.id,
+    ...facts.skills.map((s) => s.id),
+  ].filter((id): id is string => Boolean(id));
+  checkLine("Headline", tailored.headline, headlineSources);
 
   for (const group of tailored.skills) {
     checkLine(`Skills / ${group.category}`, group.items.join(", "), group.sourceIds);

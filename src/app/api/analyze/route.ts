@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { ingestResume, type SourceDocument } from "@/lib/ingest";
 import { fetchJd } from "@/lib/ingest/jd-fetch";
-import { resumeToText } from "@/lib/ingest/resume-text";
 import {
   analyzeGaps,
   extractJobSpec,
@@ -10,7 +10,15 @@ import {
 } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
-export const maxDuration = 800;
+
+/**
+ * Vercel caps a serverless function at 300s (Pro); Hobby is lower still. A full
+ * run measured ~207s on a one-page resume, so a long resume against a long JD
+ * can exceed this. Reliable hosting needs the pipeline moved behind a job queue
+ * with the client polling — this ceiling is the honest limit until then, and it
+ * fails loudly rather than appearing to hang.
+ */
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -21,15 +29,19 @@ export async function POST(request: Request) {
     const jdTextInput = String(form.get("jdText") ?? "").trim();
 
     /* ---- resume in ---- */
-    let rawResumeText: string;
+    let source: SourceDocument;
     if (file instanceof File && file.size > 0) {
-      rawResumeText = await resumeToText({
+      source = await ingestResume({
         filename: file.name,
         mimeType: file.type,
         bytes: Buffer.from(await file.arrayBuffer()),
       });
     } else if (resumeText.length > 200) {
-      rawResumeText = resumeText;
+      source = await ingestResume({
+        filename: "pasted.txt",
+        mimeType: "text/plain",
+        bytes: Buffer.from(resumeText, "utf8"),
+      });
     } else {
       return NextResponse.json(
         { error: "Upload a resume file, or paste at least a few hundred characters of resume text." },
@@ -70,11 +82,16 @@ export async function POST(request: Request) {
     /* ---- pipeline ---- */
     const [job, facts] = await Promise.all([
       extractJobSpec(jdText, sourceNote),
-      extractResumeFacts(rawResumeText),
+      extractResumeFacts(source.rawText),
     ]);
 
     const gaps = await analyzeGaps(job, facts);
-    const { tailored, truth, repairAttempted } = await tailorResume(job, facts, gaps, rawResumeText);
+    const { tailored, truth, repairAttempted } = await tailorResume(
+      job,
+      facts,
+      gaps,
+      source.rawText,
+    );
     const { report, strategy } = await scoreAndStrategize(job, gaps, tailored);
 
     return NextResponse.json({
@@ -86,7 +103,17 @@ export async function POST(request: Request) {
       repairAttempted,
       report,
       strategy,
-      rawResumeText,
+      rawResumeText: source.rawText,
+      // The layout itself cannot cross the JSON boundary (it holds an open zip
+      // handle for DOCX), so the client re-sends the original file when it asks
+      // for a render. Everything needed to choose a mode travels here.
+      source: {
+        kind: source.kind,
+        preservable: source.preservable,
+        pageCount: source.pageCount,
+        notes: source.notes,
+        style: source.style,
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error.";

@@ -95,6 +95,13 @@ export async function tailorResume(
     "Surface every recoverableKeyword — those are already true and merely buried.",
   ].join("\n");
 
+  // The guard's vocabulary is seeded with this JD's own terms so the words this
+  // application is actually judged on are the ones it watches hardest.
+  const jdTerms = [
+    ...job.requirements.map((r) => r.term),
+    ...job.keywords.flatMap((k) => [k.term, ...k.variants]),
+  ];
+
   let tailored = await structured({
     system: TAILOR_SYSTEM,
     user: brief,
@@ -102,7 +109,7 @@ export async function tailorResume(
     effort: "xhigh",
   });
 
-  let truth = runTruthGuard(tailored, facts, rawResumeText);
+  let truth = runTruthGuard(tailored, facts, rawResumeText, jdTerms);
   let repairAttempted = false;
 
   if (!truth.passed) {
@@ -126,7 +133,7 @@ export async function tailorResume(
       schema: TailoredResumeSchema,
       effort: "xhigh",
     });
-    truth = runTruthGuard(tailored, facts, rawResumeText);
+    truth = runTruthGuard(tailored, facts, rawResumeText, jdTerms);
   }
 
   return { tailored, truth, repairAttempted };

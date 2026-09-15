@@ -8,9 +8,9 @@ import { extractText, getDocumentProxy } from "unpdf";
 const BASE = process.env.BASE_URL ?? "http://localhost:3210";
 
 const facts = {
-  contact: { name: "Priya Nair", email: "priya@example.com", phone: null, location: "Bengaluru", links: [] },
+  contact: { name: "Priya Nair", email: "priya@example.com", phone: "", location: "Bengaluru", links: [] },
   headline: "Backend Engineer",
-  summary: null,
+  summary: "",
   experience: [{
     id: "E1", company: "Acme Payments", title: "Backend Engineer", location: "Bengaluru",
     startDate: "Jun 2023", endDate: "Present",
@@ -42,17 +42,19 @@ const check = (name, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const res = await fetch(`${BASE}/api/pdf`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tailored, facts, company: "Acme Payments" }),
-});
+// The route takes multipart now: preservation modes need the original file
+// back, because the server keeps no copy of it between requests.
+const body = new FormData();
+body.set("payload", JSON.stringify({ tailored, facts, company: "Acme Payments", mode: "optimize" }));
+
+const res = await fetch(`${BASE}/api/pdf`, { method: "POST", body });
 
 check("route returns 200", res.ok, `status ${res.status}`);
 check("content type is PDF", res.headers.get("content-type") === "application/pdf");
+check("render mode is reported", res.headers.get("x-render-mode") === "optimize", res.headers.get("x-render-mode") ?? "absent");
 check(
   "filename is job specific",
-  (res.headers.get("content-disposition") ?? "").includes("Priya-Nair-Resume-Acme-Payments.pdf"),
+  (res.headers.get("content-disposition") ?? "").includes("Priya-Nair-Resume-Acme-Payments-ATS.pdf"),
   res.headers.get("content-disposition") ?? "",
 );
 

@@ -1,7 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { AnalyzeError, AnalyzeSuccess } from "@/lib/api-types";
+import { useState } from "react";
+import type {
+  AnalyzeError,
+  AnalyzeSuccess,
+  RenderFidelity,
+  RenderMode,
+} from "@/lib/api-types";
 
 const scoreTone = (n: number) =>
   n >= 80 ? "text-emerald-700" : n >= 60 ? "text-amber-700" : "text-red-700";
@@ -28,18 +33,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const PRESERVE_LABEL: Record<string, string> = {
+  exact: "Your exact file — text swapped in place, formatting untouched",
+  visual: "A rebuild that matches your design. Close, but not your original file",
+  none: "Plain text carries no formatting, so only the ATS layout is available",
+};
+
 export default function Home() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AnalyzeError | null>(null);
   const [result, setResult] = useState<AnalyzeSuccess | null>(null);
   const [showJdPaste, setShowJdPaste] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [fidelity, setFidelity] = useState<RenderFidelity | null>(null);
+  const [downloading, setDownloading] = useState<RenderMode | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setResult(null);
+    setFidelity(null);
 
     try {
       const res = await fetch("/api/analyze", {
@@ -60,53 +74,90 @@ export default function Home() {
     }
   }
 
-  async function downloadPdf() {
+  async function download(mode: RenderMode) {
     if (!result) return;
-    const res = await fetch("/api/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tailored: result.tailored,
-        facts: result.facts,
-        company: result.job.company,
-      }),
-    });
-    if (!res.ok) {
-      setError(await res.json());
-      return;
+    setDownloading(mode);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.set(
+        "payload",
+        JSON.stringify({
+          tailored: result.tailored,
+          facts: result.facts,
+          company: result.job.company,
+          mode,
+        }),
+      );
+      // Preservation needs the original bytes; the server keeps no copy.
+      if (mode === "preserve" && resumeFile) body.set("resume", resumeFile);
+
+      const res = await fetch("/api/pdf", { method: "POST", body });
+      if (!res.ok) {
+        setError(await res.json());
+        return;
+      }
+      const header = (k: string) => res.headers.get(k);
+      const num = (k: string) => (header(k) ? Number(header(k)) : null);
+      const filename =
+        header("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "resume.pdf";
+
+      setFidelity({
+        mode: header("X-Render-Mode") ?? mode,
+        mapped: num("X-Paragraphs-Mapped"),
+        rewritten: num("X-Paragraphs-Rewritten"),
+        skipped: num("X-Paragraphs-Skipped"),
+        unplaced: num("X-Lines-Unplaced"),
+        columns: num("X-Columns"),
+        convertWarning: header("X-Convert-Warning"),
+        filename,
+      });
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError({ error: (err as Error).message });
+    } finally {
+      setDownloading(null);
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
-      res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "resume.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
   }
+
+  const src = result?.source;
+  const canPreserve = src ? src.preservable !== "none" : false;
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">ATS Resume Builder</h1>
         <p className="mt-1.5 max-w-2xl text-sm text-neutral-600">
-          Upload your resume and a job description. Every rewritten line is traced back to
-          something your resume already said, and lines that cannot be traced are reported rather
-          than shipped.
+          Upload your resume and a job description. Your resume is the only source of material —
+          every rewritten line is traced back to something it already said, and anything that
+          cannot be traced is reported rather than shipped.
         </p>
       </header>
 
-      <form ref={formRef} onSubmit={onSubmit} className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
+      <form
+        onSubmit={onSubmit}
+        className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5"
+      >
         <div>
           <label className="block text-sm font-medium">Your resume</label>
           <input
             type="file"
             name="resume"
             accept=".pdf,.docx,.txt,.md"
+            onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
             className="mt-1.5 block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-sm file:text-white"
           />
           <p className="mt-1 text-xs text-neutral-500">
-            PDF, DOCX, TXT or Markdown. Text-based files only — a scanned PDF has no text to read.
+            <span className="font-medium text-neutral-700">Upload the .docx if you have it</span> —
+            we can then keep your exact formatting. From a PDF we can only match the style, because
+            a PDF stores positioned text rather than editable paragraphs.
           </p>
         </div>
 
@@ -115,7 +166,7 @@ export default function Home() {
           <input
             type="url"
             name="jdUrl"
-            placeholder="https://www.naukri.com/job-listings-..."
+            placeholder="https://..."
             className="mt-1.5 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
           />
           <button
@@ -155,7 +206,7 @@ export default function Home() {
         </div>
       )}
 
-      {result && (
+      {result && src && (
         <div className="mt-6 space-y-5">
           <Section title={`Match — ${result.job.title} at ${result.job.company}`}>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
@@ -170,12 +221,26 @@ export default function Home() {
               An expert estimate of how this resume performs through a keyword screen and a
               recruiter&apos;s first pass. It is not a reading from any commercial ATS product.
             </p>
-            {result.job.extractionConfidence !== "high" && (
-              <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                Job description read with {result.job.extractionConfidence} confidence.
-                {result.job.extractionNotes ? ` ${result.job.extractionNotes}` : ""}
+          </Section>
+
+          <Section title="How your file was read">
+            <p className="text-sm">
+              <span className="font-medium uppercase">{src.kind}</span>
+              {src.style ? (
+                <span className="text-neutral-600">
+                  {" "}
+                  · {src.style.columnCount === 1 ? "single column" : `${src.style.columnCount} columns`} ·{" "}
+                  {src.style.serif ? "serif" : "sans-serif"} · body {src.style.fontSizes.body}pt
+                  {src.style.accentColor ? ` · accent ${src.style.accentColor}` : ""}
+                </span>
+              ) : null}
+            </p>
+            <p className="mt-1.5 text-sm text-neutral-700">{PRESERVE_LABEL[src.preservable]}</p>
+            {src.notes.map((n, i) => (
+              <p key={i} className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {n}
               </p>
-            )}
+            ))}
           </Section>
 
           <Section title="Truthfulness check">
@@ -289,19 +354,64 @@ export default function Home() {
             </dl>
           </Section>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={downloadPdf}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Download ATS PDF
-            </button>
-            {!result.truth.passed && (
-              <span className="text-xs text-red-700">
-                Fix the flagged lines before you send this anywhere.
-              </span>
+          <Section title="Download">
+            <p className="mb-3 text-sm text-neutral-600">
+              Two audiences, two files. Send your own format to a human; upload the ATS layout to a
+              portal that parses it mechanically.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => download("preserve")}
+                disabled={!canPreserve || downloading !== null || !resumeFile}
+                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                {downloading === "preserve" ? "Rendering…" : "Download in your format"}
+              </button>
+              <button
+                onClick={() => download("optimize")}
+                disabled={downloading !== null}
+                className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
+              >
+                {downloading === "optimize" ? "Rendering…" : "Download ATS layout"}
+              </button>
+            </div>
+            {!resumeFile && canPreserve && (
+              <p className="mt-2 text-xs text-neutral-500">
+                Format preservation needs the original file. Re-select it above — the server keeps
+                no copy of your resume.
+              </p>
             )}
-          </div>
+            {!result.truth.passed && (
+              <p className="mt-2 text-xs text-red-700">
+                Fix the flagged lines before you send this anywhere.
+              </p>
+            )}
+
+            {fidelity && (
+              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700">
+                <p className="font-medium">Rendered {fidelity.filename}</p>
+                {fidelity.mode === "preserve-exact" && (
+                  <p className="mt-1">
+                    {fidelity.rewritten} of {fidelity.mapped} matched paragraphs rewritten in place.
+                    {fidelity.skipped ? ` ${fidelity.skipped} skipped (tables are left alone).` : ""}
+                    {fidelity.unplaced
+                      ? ` ${fidelity.unplaced} rewritten line(s) had no home paragraph and were left out — usually one original bullet split into two.`
+                      : ""}
+                  </p>
+                )}
+                {fidelity.mode === "preserve-visual" && (
+                  <p className="mt-1">
+                    Rebuilt from your measured style
+                    {fidelity.columns ? ` in ${fidelity.columns} column(s)` : ""}. This matches your
+                    design; it is not your original file.
+                  </p>
+                )}
+                {fidelity.convertWarning && (
+                  <p className="mt-1.5 text-amber-800">{fidelity.convertWarning}</p>
+                )}
+              </div>
+            )}
+          </Section>
         </div>
       )}
     </main>
