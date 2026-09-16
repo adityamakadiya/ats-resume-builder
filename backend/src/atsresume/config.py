@@ -1,17 +1,73 @@
 """Runtime configuration.
 
-Everything tunable lives here so the pipeline modules stay free of magic
-numbers, and so cost and latency can be traded without editing logic.
+The cost lever that matters is which model runs which step. Four of the five
+steps are mechanical: pulling structured facts out of a resume, decomposing a
+posting, comparing two structured objects, and writing advice about a score that
+was already computed. Sonnet does those as well as Opus does and costs a
+fraction as much.
+
+The rewrite is the exception. It is the step whose quality decides whether the
+resume passes a first screen, so it stays on Opus in every profile except
+``fast``. Cutting cost there would be cutting the product.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
+
+OPUS = "claude-opus-5"
+SONNET = "claude-sonnet-5"
+
+
+class StepConfig(BaseModel):
+    model: str
+    effort: Effort
+
+
+class Profile(StrEnum):
+    FAST = "fast"
+    BALANCED = "balanced"
+    THOROUGH = "thorough"
+
+
+PROFILES: dict[Profile, dict[str, StepConfig]] = {
+    # Measured, not assumed: putting the rewrite on Sonnet made the pipeline
+    # *slower* than balanced (167s versus 92s for that step), because Sonnet
+    # spends longer thinking on this task than Opus does. So fast keeps Opus and
+    # buys its speed by lowering effort instead.
+    Profile.FAST: {
+        "extract": StepConfig(model=SONNET, effort="low"),
+        "analyze": StepConfig(model=SONNET, effort="medium"),
+        "gaps": StepConfig(model=SONNET, effort="low"),
+        "tailor": StepConfig(model=OPUS, effort="medium"),
+        "strategy": StepConfig(model=SONNET, effort="low"),
+    },
+    # The default. Everything mechanical on Sonnet, the rewrite on Opus.
+    Profile.BALANCED: {
+        "extract": StepConfig(model=SONNET, effort="medium"),
+        "analyze": StepConfig(model=SONNET, effort="high"),
+        # Measured at 92s on high and it is pure input-to-input reasoning, so it
+        # is the cheapest place to buy wall clock back.
+        "gaps": StepConfig(model=SONNET, effort="medium"),
+        "tailor": StepConfig(model=OPUS, effort="high"),
+        "strategy": StepConfig(model=SONNET, effort="medium"),
+    },
+    # What the pipeline did before profiles existed.
+    Profile.THOROUGH: {
+        "extract": StepConfig(model=OPUS, effort="medium"),
+        "analyze": StepConfig(model=OPUS, effort="high"),
+        "gaps": StepConfig(model=OPUS, effort="high"),
+        "tailor": StepConfig(model=OPUS, effort="xhigh"),
+        "strategy": StepConfig(model=OPUS, effort="high"),
+    },
+}
 
 
 class Settings(BaseSettings):
@@ -20,13 +76,7 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: str = ""
-    model: str = "claude-opus-5"
-
-    # Effort is the first quality/cost lever. Extraction is mechanical and does
-    # not repay deep reasoning; rewriting and gap analysis do.
-    effort_extract: Effort = "medium"
-    effort_analyze: Effort = "high"
-    effort_tailor: Effort = "xhigh"
+    profile: Profile = Profile.BALANCED
 
     max_tokens: int = 32_000
     request_timeout_s: float = 900.0
@@ -39,16 +89,23 @@ class Settings(BaseSettings):
     max_jd_chars: int = 40_000
     min_jd_chars: int = 400
 
-    # JD fetching
+    # One resume against many postings is the normal pattern, and re-extracting
+    # identical text every time is the easiest money in the pipeline to stop
+    # spending.
+    cache_facts: bool = True
+    cache_dir: str = ""
+
     jd_fetch_timeout_s: float = 20.0
     enable_playwright_fallback: bool = True
     playwright_timeout_ms: int = 25_000
 
-    # Rendering
     render_timeout_s: float = 120.0
     rendercv_theme: str = "engineeringresumes"
 
     cors_origins: str = "http://localhost:3000"
+
+    def step(self, name: str) -> StepConfig:
+        return PROFILES[self.profile][name]
 
     @property
     def cors_origin_list(self) -> list[str]:

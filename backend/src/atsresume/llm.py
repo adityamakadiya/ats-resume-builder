@@ -22,16 +22,73 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import anthropic
 from pydantic import BaseModel, ValidationError
 
-from .config import Effort, get_settings
+from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+# USD per million tokens, from the published rates. Used only to report what a
+# run cost; nothing branches on it. Cost was the loudest complaint about this
+# pipeline and it was invisible, which is how it got to two dollars unnoticed.
+PRICES = {
+    "claude-opus-5": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+
+
+@dataclass
+class Usage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cost_usd: float = 0.0
+    calls: int = 0
+
+    def add(self, model: str, message: Any) -> None:
+        usage = getattr(message, "usage", None)
+        if usage is None:
+            return
+        raw_in = getattr(usage, "input_tokens", 0) or 0
+        raw_out = getattr(usage, "output_tokens", 0) or 0
+        cached = getattr(usage, "cache_read_input_tokens", 0) or 0
+        self.input_tokens += raw_in
+        self.output_tokens += raw_out
+        self.cache_read_tokens += cached
+        self.calls += 1
+
+        price_in, price_out = PRICES.get(model, (5.0, 25.0))
+        # Cache reads bill at roughly a tenth of the input rate.
+        self.cost_usd += (
+            raw_in * price_in + cached * price_in * 0.1 + raw_out * price_out
+        ) / 1_000_000
+
+    def summary(self) -> str:
+        return (
+            f"{self.calls} calls, {self.input_tokens:,} in / {self.output_tokens:,} out, "
+            f"${self.cost_usd:.3f}"
+        )
+
+
+# Per-thread so concurrent requests do not pool their numbers together.
+_local = threading.local()
+
+
+def start_usage() -> Usage:
+    _local.usage = Usage()
+    return _local.usage
+
+
+def current_usage() -> Usage | None:
+    return getattr(_local, "usage", None)
 
 _client: anthropic.Anthropic | None = None
 
@@ -92,26 +149,35 @@ def structured(
     system: str,
     user: str,
     schema: type[T],
-    effort: Effort = "high",
+    step: str = "analyze",
     max_tokens: int | None = None,
 ) -> T:
-    """One cached system prompt, one user message, one validated object back."""
+    """One cached system prompt, one user message, one validated object back.
+
+    ``step`` selects the model and effort from the active profile rather than
+    taking them directly, so the cost/quality dial lives in one place instead of
+    being spelled out at every call site.
+    """
     settings = get_settings()
     client = get_client()
+    chosen = settings.step(step)
 
     try:
         with client.messages.stream(
-            model=settings.model,
+            model=chosen.model,
             max_tokens=max_tokens or settings.max_tokens,
             thinking={"type": "adaptive"},
             output_config={
-                "effort": effort,
+                "effort": chosen.effort,
                 "format": {"type": "json_schema", "schema": strict_schema(schema)},
             },
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user}],
         ) as stream:
             message = stream.get_final_message()
+        tracker = current_usage()
+        if tracker is not None:
+            tracker.add(chosen.model, message)
     except anthropic.BadRequestError as exc:
         detail = str(exc)
         if "grammar is too large" in detail:

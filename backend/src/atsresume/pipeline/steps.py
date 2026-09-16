@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from ..config import get_settings
+from .. import cache
 from ..llm import structured
 from ..models import (
     AtsReport,
@@ -19,6 +19,7 @@ from ..models import (
 )
 from ..truth.guard import run_truth_guard
 from . import prompts
+from .sanitize import sanitize
 from .scoring import compute_ats_report
 
 logger = logging.getLogger(__name__)
@@ -29,29 +30,32 @@ def _block(tag: str, body: str) -> str:
 
 
 def extract_resume_facts(raw_resume_text: str) -> ResumeFacts:
-    settings = get_settings()
-    return structured(
+    cached = cache.get(raw_resume_text)
+    if cached is not None:
+        return cached
+
+    facts = structured(
         system=prompts.RESUME_EXTRACTION,
         user="Extract structured facts from this resume.\n\n"
         + _block("resume", raw_resume_text),
         schema=ResumeFacts,
-        effort=settings.effort_extract,
+        step="extract",
     )
+    cache.put(raw_resume_text, facts)
+    return facts
 
 
 def extract_job_spec(jd_text: str, source_note: str) -> JobSpec:
-    settings = get_settings()
     return structured(
         system=prompts.JD_EXTRACTION,
         user=f"Decompose this job description.\n\nSource: {source_note}\n\n"
         + _block("job_description", jd_text),
         schema=JobSpec,
-        effort=settings.effort_analyze,
+        step="analyze",
     )
 
 
 def analyze_gaps(job: JobSpec, facts: ResumeFacts) -> GapAnalysis:
-    settings = get_settings()
     return structured(
         system=prompts.GAP_ANALYSIS,
         user="Compare this candidate against this role.\n\n"
@@ -59,7 +63,7 @@ def analyze_gaps(job: JobSpec, facts: ResumeFacts) -> GapAnalysis:
         + "\n\n"
         + _block("resume_facts", facts.model_dump_json(indent=2)),
         schema=GapAnalysis,
-        effort=settings.effort_analyze,
+        step="gaps",
     )
 
 
@@ -68,6 +72,10 @@ class TailorOutcome:
     tailored: TailoredResume
     truth: TruthReport
     repair_attempted: bool
+    # Why the first draft was rejected, if it was. The repair round doubles the
+    # cost of the most expensive step, so knowing which rule keeps tripping is
+    # the difference between tuning the prompt and guessing at it.
+    first_draft_violations: list[str] = field(default_factory=list)
 
 
 def tailor_resume(
@@ -84,7 +92,6 @@ def tailor_resume(
     candidate is shown precisely which lines are unverifiable rather than handed
     a resume that reads well and cannot be defended in an interview.
     """
-    settings = get_settings()
     jd_terms = job.all_terms()
 
     brief = "\n\n".join(
@@ -99,42 +106,59 @@ def tailor_resume(
         ]
     )
 
-    tailored = structured(
-        system=prompts.TAILOR,
-        user=brief,
-        schema=TailoredResume,
-        effort=settings.effort_tailor,
+    tailored = sanitize(
+        structured(
+            system=prompts.TAILOR,
+            user=brief,
+            schema=TailoredResume,
+            step="tailor",
+        )
     )
     truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
     repair_attempted = False
+    first_draft_violations: list[str] = []
 
     if not truth.passed:
         repair_attempted = True
+        first_draft_violations = [
+            f"{v.code.value}: {v.offending[:90]}" for v in truth.violations if v.severity == "error"
+        ]
         findings = "\n".join(
             f'- [{v.code.value}] {v.location}: {v.detail}\n  Line: "{v.offending}"'
             for v in truth.violations
             if v.severity == "error"
         )
-        logger.info("Truth guard rejected the first draft (%d errors)", truth.error_count)
+        logger.warning(
+            "Truth guard rejected the first draft (%d errors): %s",
+            truth.error_count,
+            "; ".join(first_draft_violations[:5]),
+        )
 
-        tailored = structured(
-            system=prompts.TAILOR,
-            user="\n\n".join(
-                [
-                    brief,
-                    "Your previous draft failed verification against the uploaded resume:\n"
-                    + findings,
-                    "Rewrite it. For each failing line, either restate it using only what its "
-                    "sources actually say, or drop it. Do not try to justify a figure or a "
-                    "technology that is not in the original resume.",
-                ]
-            ),
-            schema=TailoredResume,
-            effort=settings.effort_tailor,
+        repair_brief = "\n\n".join(
+            [
+                brief,
+                "Your previous draft failed verification against the uploaded resume:\n" + findings,
+                "Rewrite it. For each failing line, either restate it using only what its "
+                "sources actually say, or drop it. Do not try to justify a figure or a "
+                "technology that is not in the original resume.",
+            ]
+        )
+        tailored = sanitize(
+            structured(
+                system=prompts.TAILOR,
+                user=repair_brief,
+                schema=TailoredResume,
+                step="tailor",
+            )
         )
         truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
 
-    return TailorOutcome(tailored=tailored, truth=truth, repair_attempted=repair_attempted)
+    return TailorOutcome(
+        tailored=tailored,
+        truth=truth,
+        repair_attempted=repair_attempted,
+        first_draft_violations=first_draft_violations,
+    )
 
 
 def strategize(
@@ -143,7 +167,6 @@ def strategize(
     tailored: TailoredResume,
     report: AtsReport,
 ) -> Strategy:
-    settings = get_settings()
     return structured(
         system=prompts.STRATEGY,
         user="Advise this candidate on this application.\n\n"
@@ -155,7 +178,7 @@ def strategize(
         + "\n\n"
         + _block("computed_ats_score", report.model_dump_json(indent=2)),
         schema=Strategy,
-        effort=settings.effort_analyze,
+        step="strategy",
     )
 
 

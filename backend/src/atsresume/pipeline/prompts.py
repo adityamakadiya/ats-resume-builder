@@ -61,6 +61,7 @@ Writing standard for bullets:
 - Use the posting's exact terminology wherever it truthfully describes what the candidate did, including its preferred variant. If the posting says "REST APIs", do not write "web services".
 - Match the posting's spelling of a term. If it writes "optimization" and the resume writes "optimisation", use the posting's form - a literal keyword screen does not know they are the same word.
 - No filler verbs (spearheaded, leveraged, utilised), no first person, no adjective stacking, no sentence that could describe any engineer.
+- ASCII punctuation only. Never use an em dash or an en dash anywhere, including in the headline. They are the clearest signal that a document was machine-drafted, and a recruiter who spots one has a reason to discount the rest. Where you would reach for one, use a comma, a colon, or restructure the sentence. Straight quotes and apostrophes only.
 
 Structure:
 - headline: the candidate's real current level aimed at this role's title. Never promote them a level.

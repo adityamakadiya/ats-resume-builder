@@ -237,7 +237,7 @@ export default function Home() {
             {phase === "working" ? "Working…" : "Tailor and verify"}
           </button>
           <span className="font-mono text-[0.6875rem] text-ink-faint">
-            ~5 minutes · roughly $2 of model time
+            2 to 3 minutes · about $0.40 of model time
           </span>
         </div>
       </form>

@@ -35,7 +35,10 @@ RESUME_TEXT = (
 def test_health(client):
     body = client.get("/health").json()
     assert body["status"] == "ok"
-    assert "model" in body
+    assert body["profile"] in {"fast", "balanced", "thorough"}
+    # The rewrite is the step whose quality decides the outcome, so the default
+    # profile must not quietly downgrade it.
+    assert body["models"]["tailor"] == "claude-opus-5"
 
 
 def test_parse_requires_some_input(client):

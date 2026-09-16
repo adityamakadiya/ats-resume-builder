@@ -95,14 +95,47 @@ def normalise(text: str) -> str:
     return _SPACES.sub(" ", _PUNCT.sub(" ", lowered)).strip()
 
 
+# Words that make a job-description term a description of a capability rather
+# than the name of a technology.
+_GENERIC = frozenset(
+    {
+        "data", "isolation", "design", "designing", "scaling", "scalable", "api", "apis",
+        "service", "services", "system", "systems", "server", "client", "based", "driven",
+        "management", "managing", "development", "developing", "engineering", "experience",
+        "knowledge", "strong", "solid", "good", "excellent", "production", "performance",
+        "optimization", "optimisation", "testing", "tests", "code", "review", "reviews",
+        "team", "teams", "product", "products", "end", "stack", "full", "backend",
+        "frontend", "web", "mobile", "cloud", "software", "application", "applications",
+        "architecture", "patterns", "practices", "tooling", "tools", "modern", "using",
+        "multi", "tenant", "distributed", "real", "time", "high", "low", "level",
+    }
+)
+
+
 def build_vocabulary(jd_terms: list[str] | None = None) -> list[str]:
+    """The built-in list, seeded with the technology names this posting uses.
+
+    Only names get seeded. A posting writes requirements as capability phrases -
+    "multi-tenant data isolation", "designing and scaling RESTful APIs" - and
+    seeding those meant the guard flagged a rewrite for using the posting's own
+    wording, which is exactly what the tailoring prompt asks it to do. That
+    false positive rejected the first draft on every run and cost a second
+    Opus call each time.
+
+    So a seeded term must look like a product name: one or two words, and no
+    word that is generic enough to belong to a capability description.
+    """
     terms = set(TECH_VOCABULARY)
     for raw in jd_terms or []:
-        term = raw.strip()
-        # Long phrases are responsibilities, not technologies, and matching them
-        # verbatim produces noise rather than findings.
-        if 2 <= len(term) <= 40 and re.search(r"[a-zA-Z]", term):
-            terms.add(term.lower())
+        term = raw.strip().lower()
+        if not (2 <= len(term) <= 30) or not re.search(r"[a-z]", term):
+            continue
+        words = re.split(r"[\s/]+", term)
+        if len(words) > 2:
+            continue
+        if any(word in _GENERIC for word in words):
+            continue
+        terms.add(term)
     return sorted(terms)
 
 

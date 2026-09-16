@@ -117,15 +117,39 @@ own reader.
 
 ## Cost and latency
 
-A full `/api/run` measured **~6.5 minutes** and roughly **$2** on
-`claude-opus-5`, including one truth-guard repair round. Tune with
-`EFFORT_EXTRACT`, `EFFORT_ANALYZE`, `EFFORT_TAILOR` in `.env.local`.
+Set `PROFILE` in `.env.local`. Measured on a one-page resume against a long
+posting:
+
+| Profile | Wall clock | Cost | Rewrite runs on |
+|---|---|---|---|
+| `fast` | ~2 min | ~$0.25 | Opus, medium effort |
+| `balanced` (default) | **2 to 3 min** | **~$0.40** | Opus, high effort |
+| `thorough` | ~6 min | ~$2.00 | Opus, xhigh effort |
+
+Four of the five model calls are mechanical - extracting facts, decomposing a
+posting, comparing two structured objects, writing advice about an
+already-computed score - and run on Sonnet. The rewrite stays on Opus in every
+profile, because it is the step that decides whether the resume passes a screen.
+
+Two measurements worth recording, because both contradicted the obvious guess:
+
+- Putting the **rewrite** on Sonnet made the pipeline *slower*, not faster: 167s
+  for that step against Opus's 92s, because Sonnet spends longer thinking on it.
+  `fast` therefore keeps Opus and lowers effort instead.
+- The **gap analysis** was the real bottleneck at 92s on high effort. It is pure
+  reasoning over two JSON objects and reads almost the same at medium, which is
+  where most of the wall clock came back.
+
+Resume facts are cached on disk by a hash of the extracted text, so the second
+posting you run against the same resume skips extraction entirely (~25s and a
+model call). `CACHE_FACTS=false` disables it.
 
 ## Known limits
 
-- **No caching.** The same resume against ten postings re-extracts ten times.
-- **No progress streaming.** `/api/run` is a single long request; a client
-  needs its own timeout handling.
+- **No progress streaming inside a step.** The client gets real progress across
+  the four calls, but a single call is opaque while it runs.
+- **The repair round fires on roughly half of runs**, which adds an Opus call.
+  It is usually the model citing a source id that does not exist.
 - **`total_years_experience`** is inferred by the model from dates and is
   occasionally off by a few months, which moves `experience_match`.
 - **Format preservation is out of scope here.** This backend renders the
@@ -140,3 +164,16 @@ separate download and the fallback is skipped cleanly without it:
 ```bash
 ./.venv/bin/playwright install chromium
 ```
+
+## Typography
+
+Everything the model writes goes through `pipeline/sanitize.py` before the truth
+guard sees it, so the guard verifies exactly what will be rendered.
+
+The em dash is the clearest signal that a document was machine-drafted, and a
+recruiter who spots one in a bullet has a reason to discount the rest. Models
+reach for them constantly and an instruction alone does not reliably stop it, so
+they are removed in code: spaced dashes become commas, tight ones become
+hyphens, and the headline uses a pipe. Smart quotes, ellipsis characters and
+non-breaking spaces go too, because keyword matching against non-ASCII is
+inconsistent across parsers.

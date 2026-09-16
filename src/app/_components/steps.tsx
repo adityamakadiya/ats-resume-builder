@@ -12,7 +12,7 @@ export type Step = {
 };
 
 export const STEPS: Step[] = [
-  { key: "parse", label: "Read the resume", detail: "Finding columns, then extracting facts with ids" },
+  { key: "parse", label: "Read the resume", detail: "Finding columns, then extracting facts with ids. Cached after the first run" },
   { key: "jd", label: "Read the posting", detail: "JSON-LD, then the guest endpoint, then a browser" },
   { key: "tailor", label: "Rewrite and verify", detail: "Rewriting, then checking every line against the original" },
   { key: "render", label: "Render the PDF", detail: "Single column, real text layer" },

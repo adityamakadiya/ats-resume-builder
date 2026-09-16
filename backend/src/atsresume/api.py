@@ -21,7 +21,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import __version__
-from .config import get_settings
+from .config import PROFILES, get_settings
 from .ingest.jd import JdFetchError, clamp_jd_text, fetch_jd
 from .ingest.resume import ResumeIngestError, ingest_resume, ingest_resume_text
 from .llm import LLMError
@@ -189,9 +189,11 @@ def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "version": __version__,
-        "model": settings.model,
+        "profile": settings.profile.value,
+        "models": {name: cfg.model for name, cfg in PROFILES[settings.profile].items()},
         "api_key_configured": bool(settings.anthropic_api_key),
         "playwright_fallback": settings.enable_playwright_fallback,
+        "cache_facts": settings.cache_facts,
     }
 
 

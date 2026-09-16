@@ -180,3 +180,39 @@ def test_empty_resume_does_not_crash():
     empty_tailored = TailoredResume(headline="", summary=TailoredSummary(text=""))
     report = run_truth_guard(empty_tailored, empty_facts, "")
     assert report.passed
+
+
+def test_jd_capability_phrases_are_not_treated_as_technologies():
+    """A posting writes requirements as capability phrases, and the tailoring
+    prompt tells the model to reuse the posting's wording. Seeding those phrases
+    as technology names meant the guard rejected the rewrite for doing what it
+    was asked, which cost a second Opus call on every single run."""
+    vocabulary = build_vocabulary(
+        [
+            "multi-tenant data isolation",
+            "designing and scaling RESTful APIs",
+            "production experience",
+            "Kubernetes",
+            "Apache Kafka",
+            "Nomad",
+        ]
+    )
+    assert "kubernetes" in vocabulary
+    assert "apache kafka" in vocabulary
+    assert "nomad" in vocabulary
+    assert "multi-tenant data isolation" not in vocabulary
+    assert "designing and scaling restful apis" not in vocabulary
+    assert "production experience" not in vocabulary
+
+
+def test_a_rewrite_may_use_the_postings_phrasing(tailored, facts):
+    """The exact false positive that was firing: the resume says 'multi-tenant
+    isolation', the posting says 'multi-tenant data isolation'."""
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = (
+        "Architected multi-tenant data isolation with tenant-scoped PostgreSQL queries."
+    )
+    draft.experience[0].bullets[0].source_ids = ["E1.B1", "S1"]
+    raw = RAW + "\n- Architected multi-tenant isolation with tenant-scoped queries."
+    report = run_truth_guard(draft, facts, raw, jd_terms=["multi-tenant data isolation"])
+    assert ViolationCode.UNSOURCED_TECH not in codes(report)
