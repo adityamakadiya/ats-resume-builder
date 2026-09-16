@@ -12,10 +12,21 @@ What actually works, measured rather than assumed:
   default in hosted deployments.
 * **Naukri** gates every server-side path behind a recaptcha token its own
   frontend generates (``jobapi/v3/search`` and ``jobapi/v4/job/{id}`` both
-  return 406). There is no stable unauthenticated route. Paste is the answer.
+  return 406). Nothing this process can send gets past it.
+* **A reader service closes that gap.** Jina's Reader renders the page on its
+  own infrastructure and returns markdown. Measured against live postings it
+  returns the complete description for Naukri (875 words) and LinkedIn (2,180),
+  keylessly, at 20 requests a minute.
 
-Playwright is a fallback for pages that are merely client-rendered. It does not
-defeat a login wall or a captcha, and nothing here pretends otherwise.
+Order is chosen so the cheapest, most private option runs first: a direct fetch
+needs no third party, so it is tried before the reader, and the reader before a
+local browser. The URL of a public job posting is all that leaves this process,
+but that is still a third party and `USE_READER_FALLBACK=false` turns it off.
+
+One trap the reader sets: a dead or redirected link comes back as HTTP 200 with
+whatever the site served instead, which for Naukri is its generic search page.
+Reader output therefore goes through exactly the same wall and length checks as
+a direct fetch; success is never inferred from the status code.
 """
 
 from __future__ import annotations
@@ -59,6 +70,10 @@ WALL_MARKERS = (
 
 # A real job description is long. A login wall or an empty SPA shell is not.
 MIN_JD_TEXT = 600
+
+READER_ENDPOINT = "https://r.jina.ai/"
+# Measured at ~4s; a slow render should not hold a request open much past that.
+READER_TIMEOUT_S = 45.0
 
 STRIP_TAGS = ("script", "style", "noscript", "svg", "header", "footer", "nav", "form")
 
@@ -191,15 +206,19 @@ def fetch_jd(url: str) -> JdFetchResult:
 
     portal = portal_of(url)
 
-    # Naukri is gated end to end; failing fast beats a slow, confusing timeout.
+    # Naukri refuses every request this process can make, so the direct attempt
+    # is pure latency. Go straight to the reader.
     if portal == "Naukri":
+        rendered = _fetch_via_reader(url)
+        if rendered is not None:
+            return JdFetchResult(text=rendered, url=url, portal=portal, method="reader")
         return _blocked(
             url,
             portal,
             "Naukri requires a browser-generated anti-bot token on every server-side route, "
-            "so the posting cannot be read from here. Open it in your browser, copy the full "
-            "description, and paste it instead.",
-            "refused",
+            "and the reader could not render the posting either. Open it in your browser, "
+            "copy the full description, and paste it instead.",
+            "reader",
         )
 
     with httpx.Client(
@@ -239,10 +258,16 @@ def fetch_jd(url: str) -> JdFetchResult:
     wall = next((m for m in WALL_MARKERS if m in lowered), "")
 
     if wall or len(text) < MIN_JD_TEXT:
+        # The reader renders on someone else's infrastructure, so it clears both
+        # a client-rendered shell and a block aimed at this process.
+        rendered = _fetch_via_reader(url)
+        if rendered is not None:
+            return JdFetchResult(text=rendered, url=url, portal=portal, method="reader")
+
         if settings.enable_playwright_fallback and not wall:
-            rendered = _fetch_with_playwright(url)
-            if rendered is not None and len(rendered) >= MIN_JD_TEXT:
-                return JdFetchResult(text=rendered, url=url, portal=portal, method="playwright")
+            local = _fetch_with_playwright(url)
+            if local is not None and len(local) >= MIN_JD_TEXT:
+                return JdFetchResult(text=local, url=url, portal=portal, method="playwright")
 
         reason = (
             f"{portal} served a sign-in or bot-check page instead of the job description."
@@ -252,6 +277,67 @@ def fetch_jd(url: str) -> JdFetchResult:
         return _blocked(url, portal, reason, method)
 
     return JdFetchResult(text=text, url=url, portal=portal, method=method)
+
+
+def _looks_like_a_posting(text: str) -> bool:
+    """The same bar a direct fetch has to clear.
+
+    The reader returns HTTP 200 whatever the site served, so a dead Naukri link
+    arrives as its generic "Jobs In India" search page with a perfectly healthy
+    status. Trusting the status code here would turn a broken link into a
+    confident analysis of a search results page.
+    """
+    if len(text) < MIN_JD_TEXT:
+        return False
+    lowered = text.lower()
+    if any(marker in lowered for marker in WALL_MARKERS):
+        return False
+    # A search or listing page names many roles and describes none.
+    listing_signals = ("job vacancies in", "jobs in india", "search results", "filter by")
+    return not any(signal in lowered for signal in listing_signals)
+
+
+def _fetch_via_reader(url: str) -> str | None:
+    """Render the page through Jina's Reader and return markdown.
+
+    Keyless works at 20 requests a minute, which is ample for one person
+    applying to jobs; ``JINA_API_KEY`` raises that when set.
+    """
+    settings = get_settings()
+    if not settings.use_reader_fallback:
+        return None
+
+    # Deliberately NOT the browser User-Agent used elsewhere in this module.
+    # The reader returns 403 to anything impersonating a browser, which is a
+    # reasonable anti-abuse rule and the opposite of what job sites want. Spoof
+    # the site, identify honestly to the service doing you a favour.
+    headers = {"Accept": "text/plain", "User-Agent": f"atsresume/{__import__('atsresume').__version__}"}
+    if settings.jina_api_key:
+        headers["Authorization"] = f"Bearer {settings.jina_api_key}"
+
+    try:
+        response = httpx.get(
+            f"{READER_ENDPOINT}{url}", headers=headers, timeout=READER_TIMEOUT_S
+        )
+    except httpx.HTTPError as exc:
+        logger.info("Reader fetch failed for %s: %s", url, exc)
+        return None
+
+    if response.status_code == 429:
+        logger.info("Reader rate limit hit for %s", url)
+        return None
+    if response.status_code != 200:
+        return None
+
+    text = response.text.strip()
+    # Strip the reader's own preamble so only the posting reaches the model.
+    body = re.split(r"^Markdown Content:\s*$", text, maxsplit=1, flags=re.M)
+    title = re.search(r"^Title:\s*(.+)$", text, re.M)
+    cleaned = (body[1] if len(body) > 1 else text).strip()
+    if title:
+        cleaned = f"Job posting: {title.group(1).strip()}\n\n{cleaned}"
+
+    return cleaned if _looks_like_a_posting(cleaned) else None
 
 
 def _fetch_with_playwright(url: str) -> str | None:

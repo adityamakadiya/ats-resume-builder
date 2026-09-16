@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     cache_dir: str = ""
 
     jd_fetch_timeout_s: float = 20.0
+    # A reader service renders the page on its own infrastructure, which is the
+    # only thing that gets past Naukri. Only the public job URL leaves this
+    # process, but that is still a third party, so it is switchable.
+    use_reader_fallback: bool = True
+    jina_api_key: str = ""
     enable_playwright_fallback: bool = True
     playwright_timeout_ms: int = 25_000
 

@@ -263,7 +263,7 @@ export default function Home() {
               onClick={() => setShowPaste((v) => !v)}
               className="mt-1.5 font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint underline underline-offset-4 hover:text-stamp"
             >
-              {showPaste ? "Hide" : "Paste instead — LinkedIn and Naukri need this"}
+              {showPaste ? "Hide" : "Or paste the posting instead"}
             </button>
             {showPaste && (
               <textarea

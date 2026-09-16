@@ -71,19 +71,36 @@ Hyphenation is repaired on the way out: `mod-\nules` becomes `modules`, while
 
 Measured, not assumed:
 
-| Source | Result |
+Four tiers, cheapest and most private first:
+
+| Tier | Handles |
 |---|---|
-| Greenhouse, Lever, Workday, careers pages | schema.org `JobPosting` JSON-LD — works |
-| LinkedIn | login shell on `/jobs/view/`; the guest endpoint returns the full text |
-| Naukri | every server route is captcha-gated (406) — refused fast, paste instead |
-| Client-rendered pages | Playwright fallback |
+| 1. Direct fetch, JSON-LD | Greenhouse, Lever, Workday, company careers pages |
+| 2. LinkedIn guest endpoint | LinkedIn, which serves a login shell on `/jobs/view/` |
+| 3. Reader service (`r.jina.ai`) | **Naukri**, and anything client-rendered or blocked |
+| 4. Playwright | client-rendered pages, locally, with no third party |
 
-Playwright fixes pages that are merely client-rendered. It does not defeat a
-login wall or a captcha, and nothing here pretends otherwise.
+Tier 3 is what closed the Naukri gap. Naukri gates every server-side route
+behind a recaptcha token its own frontend generates, so nothing this process can
+send gets through. The reader renders the page on its own infrastructure:
+measured against live postings it returns 871 words for Naukri and the full
+LinkedIn description, keylessly, at 20 requests a minute. `JINA_API_KEY` raises
+that limit; `USE_READER_FALLBACK=false` turns the tier off, after which no URL
+leaves this process.
 
-Note that LinkedIn's `robots.txt` disallows `/jobs-guest/`. This is a
-single-URL fetch on the candidate's behalf, never a crawl. Set
-`ENABLE_PLAYWRIGHT_FALLBACK=false` and avoid that path in a hosted deployment.
+Two things learned the hard way, both covered by tests:
+
+- **The reader returns HTTP 200 whatever the site served.** A dead Naukri link
+  comes back as its generic "Jobs In India" search page with a healthy status.
+  Reader output goes through the same wall and length checks as a direct fetch;
+  success is never inferred from a status code.
+- **Do not send it a spoofed browser User-Agent.** It answers 403 to anything
+  impersonating a browser, which is a sensible anti-abuse rule and the exact
+  opposite of what the job sites want. Spoof the site, identify honestly to the
+  service doing you a favour.
+
+LinkedIn's `robots.txt` disallows `/jobs-guest/`. That tier is a single-URL
+fetch on the candidate's behalf, never a crawl.
 
 ## Running it
 
