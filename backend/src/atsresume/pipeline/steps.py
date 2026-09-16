@@ -120,8 +120,11 @@ def tailor_resume(
 
     if not truth.passed:
         repair_attempted = True
+        # Log the detail, not the line. The detail names the term that tripped
+        # the rule, which is the only part that says whether this was a real
+        # catch or the guard being too eager.
         first_draft_violations = [
-            f"{v.code.value}: {v.offending[:90]}" for v in truth.violations if v.severity == "error"
+            f"{v.code.value}: {v.detail}" for v in truth.violations if v.severity == "error"
         ]
         findings = "\n".join(
             f'- [{v.code.value}] {v.location}: {v.detail}\n  Line: "{v.offending}"'

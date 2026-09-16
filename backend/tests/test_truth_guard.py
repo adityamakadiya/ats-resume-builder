@@ -216,3 +216,45 @@ def test_a_rewrite_may_use_the_postings_phrasing(tailored, facts):
     raw = RAW + "\n- Architected multi-tenant isolation with tenant-scoped queries."
     report = run_truth_guard(draft, facts, raw, jd_terms=["multi-tenant data isolation"])
     assert ViolationCode.UNSOURCED_TECH not in codes(report)
+
+
+def test_seeding_discriminates_by_shape_not_by_blocklist():
+    """A blocklist of generic words always leaks a new one.
+
+    The first version blocked "multi-tenant data isolation" and then let
+    "workflow automation" through on a real run, which rejected the draft and
+    bought a second Opus call. A posting writes the difference between a
+    technology and a capability in its capitalisation, and that is the signal
+    now used.
+    """
+    vocabulary = set(
+        build_vocabulary(
+            [
+                "Kubernetes", "Apache Kafka", "Nomad", "Node.js", "CI/CD", "gRPC",
+                "workflow automation", "multi-tenant data isolation",
+                "production experience", "end to end ownership", "event driven design",
+            ]
+        )
+    )
+    for name in ["kubernetes", "apache kafka", "nomad", "node.js", "ci/cd", "grpc"]:
+        assert name in vocabulary, f"{name} is a technology name and must be watched"
+    for phrase in [
+        "workflow automation",
+        "multi-tenant data isolation",
+        "production experience",
+        "end to end ownership",
+        "event driven design",
+    ]:
+        assert phrase not in vocabulary, f"{phrase} is a capability, not a technology"
+
+
+def test_a_rewrite_may_reuse_a_capability_phrase_from_the_posting(tailored, facts):
+    """The exact false positive seen on a live LinkedIn run."""
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = (
+        "Cut manual publishing effort 45% through webhook-driven workflow automation."
+    )
+    draft.experience[0].bullets[0].source_ids = ["E1.B2"]
+    raw = RAW + "\n- Cut manual publishing effort 45% with webhook-driven automation."
+    report = run_truth_guard(draft, facts, raw, jd_terms=["workflow automation"])
+    assert ViolationCode.UNSOURCED_TECH not in codes(report)

@@ -95,8 +95,20 @@ def normalise(text: str) -> str:
     return _SPACES.sub(" ", _PUNCT.sub(" ", lowered)).strip()
 
 
-# Words that make a job-description term a description of a capability rather
-# than the name of a technology.
+
+# A technology has a name; a capability has a description. The posting writes
+# the difference down in its capitalisation, and the extraction prompt preserves
+# it: "Kubernetes", "Apache Kafka", "Node.js", "CI/CD" against "workflow
+# automation", "multi-tenant data isolation", "production experience".
+_TECH_SHAPED = re.compile(
+    r"""^(
+        [A-Z][A-Za-z0-9+#.\-]*                      # Capitalised: Kubernetes, Kafka
+      | [A-Za-z0-9]*[0-9+#./][A-Za-z0-9+#./\-]*     # tech marker: node.js, c++, k8s
+    )$""",
+    re.VERBOSE,
+)
+
+# Second filter, for a posting that title-cases an entire requirement.
 _GENERIC = frozenset(
     {
         "data", "isolation", "design", "designing", "scaling", "scalable", "api", "apis",
@@ -108,6 +120,8 @@ _GENERIC = frozenset(
         "frontend", "web", "mobile", "cloud", "software", "application", "applications",
         "architecture", "patterns", "practices", "tooling", "tools", "modern", "using",
         "multi", "tenant", "distributed", "real", "time", "high", "low", "level",
+        "workflow", "automation", "monitoring", "logging", "deployment", "pipeline",
+        "integration", "delivery", "quality", "ownership", "mentoring", "communication",
     }
 )
 
@@ -116,26 +130,30 @@ def build_vocabulary(jd_terms: list[str] | None = None) -> list[str]:
     """The built-in list, seeded with the technology names this posting uses.
 
     Only names get seeded. A posting writes requirements as capability phrases -
-    "multi-tenant data isolation", "designing and scaling RESTful APIs" - and
-    seeding those meant the guard flagged a rewrite for using the posting's own
-    wording, which is exactly what the tailoring prompt asks it to do. That
-    false positive rejected the first draft on every run and cost a second
-    Opus call each time.
+    "workflow automation", "multi-tenant data isolation" - and seeding those
+    meant the guard flagged a rewrite for reusing the posting's own wording,
+    which is exactly what the tailoring prompt asks it to do. That false
+    positive rejected the first draft and bought a second Opus call.
 
-    So a seeded term must look like a product name: one or two words, and no
-    word that is generic enough to belong to a capability description.
+    The discriminator is shape rather than a word blocklist, because a blocklist
+    of generic words always leaks a new one: the first version of this blocked
+    "multi-tenant data isolation" and then let "workflow automation" through on
+    a real run. A seeded term is at most two words and every word must look like
+    a name - capitalised, or carrying a marker like a dot or a plus.
     """
     terms = set(TECH_VOCABULARY)
     for raw in jd_terms or []:
-        term = raw.strip().lower()
-        if not (2 <= len(term) <= 30) or not re.search(r"[a-z]", term):
+        term = raw.strip()
+        if not (2 <= len(term) <= 30):
             continue
-        words = re.split(r"[\s/]+", term)
-        if len(words) > 2:
+        words = [w for w in re.split(r"[\s/]+", term) if w]
+        if not words or len(words) > 2:
             continue
-        if any(word in _GENERIC for word in words):
+        if any(w.lower() in _GENERIC for w in words):
             continue
-        terms.add(term)
+        if not all(_TECH_SHAPED.match(w) for w in words):
+            continue
+        terms.add(term.lower())
     return sorted(terms)
 
 
