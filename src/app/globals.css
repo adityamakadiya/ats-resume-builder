@@ -1,26 +1,153 @@
 @import "tailwindcss";
 
+/*
+  Editorial forensic instrument.
+
+  The product's whole claim is that it verifies rather than embellishes, so the
+  interface is set like a laboratory report: warm paper, ink type, hairline
+  rules instead of floating cards, and every number in mono so it reads as
+  measured rather than asserted. The accent is a stamp red — the mark a
+  document gets when someone has actually checked it.
+
+  Committed to light. A paper metaphor in a dark theme is a different design,
+  and doing both halfway would blunt the one this needs to be.
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f7f4ee;
+  --paper-raised: #fffdf9;
+  --paper-sunk: #efeae1;
+  --ink: #17140f;
+  --ink-muted: #5d564a;
+  --ink-faint: #8c8274;
+  --rule: #ddd6c9;
+  --rule-strong: #c4bbaa;
+
+  --stamp: #b03a1f;
+  --stamp-soft: #f3e2dc;
+  --verified: #2f6b46;
+  --verified-soft: #e2ece5;
+  --caution: #8a6117;
+  --caution-soft: #f5ecd8;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-stamp: var(--stamp);
+  --color-stamp-soft: var(--stamp-soft);
+  --color-verified: var(--verified);
+  --color-verified-soft: var(--verified-soft);
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+
+  --font-display: var(--font-instrument-serif);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--paper);
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* A faint grain keeps the paper from reading as flat #fff-adjacent. */
+  background-image: radial-gradient(var(--rule) 0.5px, transparent 0.5px);
+  background-size: 22px 22px;
+}
+
+::selection {
+  background: var(--stamp);
+  color: var(--paper-raised);
+}
+
+/* Section headings are set as small caps rules, the way a form labels a field. */
+.label {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.rule-top {
+  border-top: 1px solid var(--rule);
+}
+
+/* Staggered reveal: one orchestrated entrance beats scattered micro-motion. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.draw {
+  transform-origin: left;
+  animation: draw 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The working indicator: a slow sweep along the active step's rail. */
+@keyframes sweep {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.sweeping {
+  background-image: linear-gradient(
+    90deg,
+    var(--rule) 0%,
+    var(--stamp) 35%,
+    var(--stamp) 45%,
+    var(--rule) 80%
+  );
+  background-size: 200% 100%;
+  animation: sweep 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .draw,
+  .sweeping {
+    animation: none;
+  }
+  .draw {
+    transform: none;
+  }
+  .sweeping {
+    background-image: none;
+    background-color: var(--stamp);
+  }
 }

@@ -35,7 +35,14 @@ from .models import (
     TailoredResume,
     TruthReport,
 )
-from .pipeline import extract_resume_facts, run_pipeline
+from .pipeline import (
+    analyze_gaps,
+    extract_job_spec,
+    extract_resume_facts,
+    run_pipeline,
+    strategize,
+    tailor_resume,
+)
 from .render.rendercv_adapter import RenderError, render_pdf
 
 logger = logging.getLogger(__name__)
@@ -57,6 +64,10 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    # Response headers are invisible to cross-origin JavaScript unless they are
+    # named here. Without this the browser downloads the PDF as "resume.pdf" and
+    # silently drops the render warnings — the endpoint looks like it works.
+    expose_headers=["Content-Disposition", "X-Render-Warnings"],
 )
 
 
@@ -89,6 +100,29 @@ class RunResponse(BaseModel):
     strategy: Strategy
     repair_attempted: bool
     source: SourceDocument
+
+
+class TailorRequest(BaseModel):
+    """Facts the client already has, plus the posting text.
+
+    Splitting this out of ``/api/run`` is what lets a client show real progress:
+    parsing the resume and tailoring it are two long steps, and a single
+    five-minute request can only be reported as a spinner.
+    """
+
+    facts: ResumeFacts
+    jd_text: str
+    source_note: str = "pasted by the candidate"
+
+
+class TailorResponse(BaseModel):
+    job: JobSpec
+    gaps: GapAnalysis
+    tailored: TailoredResume
+    truth: TruthReport
+    report: AtsReport
+    strategy: Strategy
+    repair_attempted: bool
 
 
 class RenderRequest(BaseModel):
@@ -222,6 +256,37 @@ async def run(
         strategy=result.strategy,
         repair_attempted=result.repair_attempted,
         source=source,
+    )
+
+
+@app.post("/api/tailor", response_model=TailorResponse)
+async def tailor(request: TailorRequest) -> TailorResponse:
+    """Part 2b: already-parsed facts plus a posting, tailored and verified.
+
+    The resume text is reconstructed from the facts for the truth guard's
+    corpus. That is slightly narrower than the original upload — a line the
+    extractor dropped is not in it — which makes the guard marginally stricter
+    here than in ``/api/run``. Stricter is the safe direction.
+    """
+    from .pipeline.scoring import compute_ats_report, facts_text_of
+
+    jd_text = clamp_jd_text(request.jd_text)
+    job = await run_in_threadpool(extract_job_spec, jd_text, request.source_note)
+    gaps = await run_in_threadpool(analyze_gaps, job, request.facts)
+    outcome = await run_in_threadpool(
+        tailor_resume, job, request.facts, gaps, facts_text_of(request.facts)
+    )
+    report = compute_ats_report(job, request.facts, outcome.tailored)
+    strategy = await run_in_threadpool(strategize, job, gaps, outcome.tailored, report)
+
+    return TailorResponse(
+        job=job,
+        gaps=gaps,
+        tailored=outcome.tailored,
+        truth=outcome.truth,
+        report=report,
+        strategy=strategy,
+        repair_attempted=outcome.repair_attempted,
     )
 
 

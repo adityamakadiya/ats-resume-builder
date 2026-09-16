@@ -1,419 +1,324 @@
 "use client";
 
-import { useState } from "react";
-import type {
-  AnalyzeError,
-  AnalyzeSuccess,
-  RenderFidelity,
-  RenderMode,
-} from "@/lib/api-types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ApiError,
+  checkHealth,
+  fetchJd,
+  parseResume,
+  renderPdf,
+  tailor,
+  type ParseResponse,
+  type TailorResponse,
+} from "@/lib/backend";
+import { STEPS, Stepper, useElapsed, type StepState } from "./_components/steps";
+import {
+  GapsBlock,
+  PreviewBlock,
+  ScoreBlock,
+  SourceNote,
+  StrategyBlock,
+  TruthBlock,
+} from "./_components/results";
 
-const scoreTone = (n: number) =>
-  n >= 80 ? "text-emerald-700" : n >= 60 ? "text-amber-700" : "text-red-700";
+type Phase = "idle" | "working" | "done";
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-      <div className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className={`text-xl font-semibold tabular-nums ${scoreTone(value)}`}>
-        {Math.round(value)}
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-700">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-const PRESERVE_LABEL: Record<string, string> = {
-  exact: "Your exact file — text swapped in place, formatting untouched",
-  visual: "A rebuild that matches your design. Close, but not your original file",
-  none: "Plain text carries no formatting, so only the ATS layout is available",
-};
+const initialStates = (): Record<string, StepState> =>
+  Object.fromEntries(STEPS.map((s) => [s.key, "waiting" as StepState]));
 
 export default function Home() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AnalyzeError | null>(null);
-  const [result, setResult] = useState<AnalyzeSuccess | null>(null);
-  const [showJdPaste, setShowJdPaste] = useState(false);
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [fidelity, setFidelity] = useState<RenderFidelity | null>(null);
-  const [downloading, setDownloading] = useState<RenderMode | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [states, setStates] = useState(initialStates);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const elapsed = useElapsed(startedAt);
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [resumeText, setResumeText] = useState("");
+  const [jdUrl, setJdUrl] = useState("");
+  const [jdText, setJdText] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
+
+  const [parsed, setParsed] = useState<ParseResponse | null>(null);
+  const [result, setResult] = useState<TailorResponse | null>(null);
+  const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
+  const [renderWarnings, setRenderWarnings] = useState<string[]>([]);
+  const [backendUp, setBackendUp] = useState<boolean | null>(null);
+  const [totalSeconds, setTotalSeconds] = useState<number | null>(null);
+
+  const resultsRef = useRef<HTMLDivElement>(null);
+  // Rendered during step 4 so the download is instant, not another wait.
+  const pdfRef = useRef<{ blob: Blob; filename: string } | null>(null);
+
+  useEffect(() => {
+    checkHealth()
+      .then((h) => setBackendUp(h.api_key_configured))
+      .catch(() => setBackendUp(false));
+  }, []);
+
+  const mark = useCallback((key: string, state: StepState) => {
+    setStates((prev) => ({ ...prev, [key]: state }));
+  }, []);
+
+  async function run(event: React.FormEvent) {
+    event.preventDefault();
+    if (phase === "working") return;
+
+    setPhase("working");
+    setStates(initialStates());
     setError(null);
     setResult(null);
-    setFidelity(null);
+    setParsed(null);
+    setRenderWarnings([]);
+    setTotalSeconds(null);
+    const began = Date.now();
+    setStartedAt(began);
 
     try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        body: new FormData(e.currentTarget),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data as AnalyzeError);
-        if ((data as AnalyzeError).needsJdPaste) setShowJdPaste(true);
-      } else {
-        setResult(data as AnalyzeSuccess);
+      /* 1 — the resume. Its own call so the wait is attributable. */
+      mark("parse", "active");
+      const parseResult = await parseResume(file ?? resumeText);
+      setParsed(parseResult);
+      mark("parse", "done");
+
+      /* 2 — the posting. Fast, and the step most likely to fail recoverably. */
+      mark("jd", "active");
+      const jd = await fetchJd(jdText.trim() ? { text: jdText } : { url: jdUrl });
+      if (jd.blocked) {
+        mark("jd", "failed");
+        setShowPaste(true);
+        throw new ApiError(jd.block_reason, 422, true, "Paste the description below and run again.");
       }
-    } catch (err) {
-      setError({ error: (err as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  }
+      mark("jd", "done");
 
-  async function download(mode: RenderMode) {
-    if (!result) return;
-    setDownloading(mode);
-    setError(null);
-    try {
-      const body = new FormData();
-      body.set(
-        "payload",
-        JSON.stringify({
-          tailored: result.tailored,
-          facts: result.facts,
-          company: result.job.company,
-          mode,
-        }),
+      /* 3 — the long one. */
+      mark("tailor", "active");
+      const tailored = await tailor(parseResult.facts, jd.text, jd.source_note);
+      setResult(tailored);
+      mark("tailor", "done");
+
+      /* 4 — render, so the PDF is ready before the button is pressed. */
+      mark("render", "active");
+      const pdf = await renderPdf(tailored.tailored, parseResult.facts, tailored.job.company);
+      setRenderWarnings(pdf.warnings);
+      pdfRef.current = pdf;
+      mark("render", "done");
+
+      setTotalSeconds(Math.round((Date.now() - began) / 1000));
+      setPhase("done");
+      requestAnimationFrame(() =>
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
       );
-      // Preservation needs the original bytes; the server keeps no copy.
-      if (mode === "preserve" && resumeFile) body.set("resume", resumeFile);
-
-      const res = await fetch("/api/pdf", { method: "POST", body });
-      if (!res.ok) {
-        setError(await res.json());
-        return;
-      }
-      const header = (k: string) => res.headers.get(k);
-      const num = (k: string) => (header(k) ? Number(header(k)) : null);
-      const filename =
-        header("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "resume.pdf";
-
-      setFidelity({
-        mode: header("X-Render-Mode") ?? mode,
-        mapped: num("X-Paragraphs-Mapped"),
-        rewritten: num("X-Paragraphs-Rewritten"),
-        skipped: num("X-Paragraphs-Skipped"),
-        unplaced: num("X-Lines-Unplaced"),
-        columns: num("X-Columns"),
-        convertWarning: header("X-Convert-Warning"),
-        filename,
-      });
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
     } catch (err) {
-      setError({ error: (err as Error).message });
+      setStates((prev) => {
+        const next = { ...prev };
+        for (const s of STEPS) if (next[s.key] === "active") next[s.key] = "failed";
+        return next;
+      });
+      const apiError = err instanceof ApiError ? err : null;
+      setError({
+        message: apiError?.message ?? (err as Error).message,
+        hint: apiError?.hint || undefined,
+      });
+      setPhase("idle");
     } finally {
-      setDownloading(null);
+      setStartedAt(null);
     }
   }
 
-  const src = result?.source;
-  const canPreserve = src ? src.preservable !== "none" : false;
+  function download() {
+    const pdf = pdfRef.current;
+    if (!pdf) return;
+    const url = URL.createObjectURL(pdf.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = pdf.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const ready = (file !== null || resumeText.trim().length > 200) && (jdUrl.trim() || jdText.trim());
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">ATS Resume Builder</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-neutral-600">
-          Upload your resume and a job description. Your resume is the only source of material —
-          every rewritten line is traced back to something it already said, and anything that
-          cannot be traced is reported rather than shipped.
+    <main className="mx-auto w-full max-w-3xl px-6 py-14 sm:px-8">
+      <header className="rise">
+        <p className="label">Resume · one posting · verified</p>
+        <h1 className="mt-3 font-display text-[3.25rem] leading-[0.95] tracking-tight text-ink sm:text-[4rem]">
+          Tailor without
+          <br />
+          {/* The italic's overhang eats the following space; pad it back. */}
+          <em className="pr-[0.12em] text-stamp">inventing</em> anything.
+        </h1>
+        <p className="mt-5 max-w-prose text-[0.9375rem] leading-relaxed text-ink-muted">
+          Your resume is the only source of material. Every rewritten line is traced back to
+          something it already said, and anything that cannot be traced is reported rather than
+          shipped.
         </p>
       </header>
 
-      <form
-        onSubmit={onSubmit}
-        className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5"
-      >
-        <div>
-          <label className="block text-sm font-medium">Your resume</label>
-          <input
-            type="file"
-            name="resume"
-            accept=".pdf,.docx,.txt,.md"
-            onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-            className="mt-1.5 block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-sm file:text-white"
-          />
-          <p className="mt-1 text-xs text-neutral-500">
-            <span className="font-medium text-neutral-700">Upload the .docx if you have it</span> —
-            we can then keep your exact formatting. From a PDF we can only match the style, because
-            a PDF stores positioned text rather than editable paragraphs.
-          </p>
-        </div>
+      {backendUp === false && (
+        <p className="rise mt-8 border-l-2 border-stamp bg-stamp-soft px-3 py-2.5 text-[0.8125rem] text-stamp">
+          The backend is not reachable, or has no API key configured. Start it with{" "}
+          <span className="font-mono">uvicorn atsresume.api:app --port 8000</span> from{" "}
+          <span className="font-mono">backend/</span>.
+        </p>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium">Job description URL</label>
-          <input
-            type="url"
-            name="jdUrl"
-            placeholder="https://..."
-            className="mt-1.5 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => setShowJdPaste((v) => !v)}
-            className="mt-1.5 text-xs text-neutral-600 underline underline-offset-2"
-          >
-            {showJdPaste ? "Hide" : "Or paste the job description instead"}
-          </button>
-        </div>
-
-        {showJdPaste && (
+      {/* ------------------------------------------------------------ form -- */}
+      <form onSubmit={run} className="rise mt-12 space-y-8" style={{ animationDelay: "80ms" }}>
+        <fieldset disabled={phase === "working"} className="space-y-8 disabled:opacity-60">
           <div>
-            <label className="block text-sm font-medium">Job description text</label>
-            <textarea
-              name="jdText"
-              rows={8}
-              placeholder="Paste the full posting — requirements, responsibilities, everything."
-              className="mt-1.5 w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
+            <label htmlFor="resume" className="label">
+              01 — Your resume
+            </label>
+            <input
+              id="resume"
+              type="file"
+              accept=".pdf,.docx,.txt,.md"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="mt-3 block w-full border border-rule-strong bg-paper-raised px-3 py-2.5 text-[0.875rem] file:mr-4 file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-mono file:text-[0.6875rem] file:uppercase file:tracking-wider file:text-paper-raised hover:border-ink"
             />
+            <p className="mt-2 text-[0.8125rem] leading-snug text-ink-faint">
+              PDF, DOCX, TXT or Markdown. A two-column layout is read column by column, which most
+              parsers do not do. A scanned PDF has no text to read.
+            </p>
+            {!file && (
+              <textarea
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+                rows={3}
+                placeholder="…or paste the resume text"
+                className="mt-3 w-full resize-y border border-rule bg-paper-raised px-3 py-2.5 font-mono text-[0.8125rem] leading-relaxed placeholder:text-ink-faint focus:border-ink focus:outline-none"
+              />
+            )}
           </div>
-        )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {busy ? "Analysing — this takes a minute or two…" : "Analyse and tailor"}
-        </button>
+          <div>
+            <label htmlFor="jd" className="label">
+              02 — The posting
+            </label>
+            <input
+              id="jd"
+              type="url"
+              value={jdUrl}
+              onChange={(e) => setJdUrl(e.target.value)}
+              placeholder="https://boards.greenhouse.io/…"
+              className="mt-3 w-full border border-rule-strong bg-paper-raised px-3 py-2.5 text-[0.875rem] placeholder:text-ink-faint focus:border-ink focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPaste((v) => !v)}
+              className="mt-2 font-mono text-[0.6875rem] uppercase tracking-wider text-ink-faint underline underline-offset-4 hover:text-stamp"
+            >
+              {showPaste ? "Hide paste" : "Or paste it instead"}
+            </button>
+            <p className="mt-2 text-[0.8125rem] leading-snug text-ink-faint">
+              Careers pages and Greenhouse, Lever or Workday links work. LinkedIn and Naukri serve a
+              sign-in wall to a server, so paste those.
+            </p>
+
+            {showPaste && (
+              <textarea
+                value={jdText}
+                onChange={(e) => setJdText(e.target.value)}
+                rows={8}
+                placeholder="Paste the full posting — requirements, responsibilities, everything."
+                className="mt-3 w-full resize-y border border-rule bg-paper-raised px-3 py-2.5 font-mono text-[0.8125rem] leading-relaxed placeholder:text-ink-faint focus:border-ink focus:outline-none"
+              />
+            )}
+          </div>
+        </fieldset>
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <button
+            type="submit"
+            disabled={phase === "working" || !ready}
+            className="border border-ink bg-ink px-5 py-2.5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-paper-raised transition-colors hover:bg-stamp hover:border-stamp disabled:cursor-not-allowed disabled:border-rule-strong disabled:bg-transparent disabled:text-ink-faint"
+          >
+            {phase === "working" ? "Working…" : "Tailor and verify"}
+          </button>
+          <span className="font-mono text-[0.6875rem] text-ink-faint">
+            ~5 minutes · roughly $2 of model time
+          </span>
+        </div>
       </form>
 
-      {error && (
-        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          <p className="font-medium">{error.error}</p>
-          {error.hint && <p className="mt-1.5 text-red-800">{error.hint}</p>}
+      {/* -------------------------------------------------------- progress -- */}
+      {(phase === "working" || error) && (
+        <div className="mt-10 rule-top pt-6">
+          <Stepper states={states} activeElapsed={elapsed} />
+          {parsed && <SourceNote source={parsed.source} />}
         </div>
       )}
 
-      {result && src && (
-        <div className="mt-6 space-y-5">
-          <Section title={`Match — ${result.job.title} at ${result.job.company}`}>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-              <Metric label="ATS score" value={result.report.atsScore} />
-              <Metric label="Keywords" value={result.report.keywordMatchPct} />
-              <Metric label="Tech skills" value={result.report.technicalSkillMatch} />
-              <Metric label="Experience" value={result.report.experienceMatch} />
-              <Metric label="Responsibilities" value={result.report.responsibilityMatch} />
-              <Metric label="Recruiter appeal" value={result.report.recruiterAppeal} />
-            </div>
-            <p className="mt-3 text-xs text-neutral-500">
-              An expert estimate of how this resume performs through a keyword screen and a
-              recruiter&apos;s first pass. It is not a reading from any commercial ATS product.
-            </p>
-          </Section>
+      {phase === "done" && parsed && (
+        <div className="rise mt-10 rule-top pt-4">
+          <p className="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-faint">
+            <span className="text-verified">✓</span> {STEPS.length} steps
+            {totalSeconds !== null && (
+              <> · {Math.floor(totalSeconds / 60)}m {totalSeconds % 60}s</>
+            )}
+          </p>
+          <SourceNote source={parsed.source} />
+        </div>
+      )}
 
-          <Section title="How your file was read">
-            <p className="text-sm">
-              <span className="font-medium uppercase">{src.kind}</span>
-              {src.style ? (
-                <span className="text-neutral-600">
-                  {" "}
-                  · {src.style.columnCount === 1 ? "single column" : `${src.style.columnCount} columns`} ·{" "}
-                  {src.style.serif ? "serif" : "sans-serif"} · body {src.style.fontSizes.body}pt
-                  {src.style.accentColor ? ` · accent ${src.style.accentColor}` : ""}
+      {error && (
+        <div className="rise mt-6 border-l-2 border-stamp bg-stamp-soft px-3 py-3">
+          <p className="text-[0.875rem] text-ink">{error.message}</p>
+          {error.hint && <p className="mt-1 text-[0.8125rem] text-ink-muted">{error.hint}</p>}
+        </div>
+      )}
+
+      {/* --------------------------------------------------------- results -- */}
+      {phase === "done" && result && parsed && (
+        <div ref={resultsRef} className="mt-16 space-y-12">
+          <div className="rise">
+            <p className="label">Result</p>
+            <h2 className="mt-2 font-display text-3xl leading-tight text-ink">
+              {result.job.title}
+              {result.job.company && (
+                <span className="text-ink-faint"> · {result.job.company}</span>
+              )}
+            </h2>
+          </div>
+
+          <ScoreBlock report={result.report} job={result.job} />
+          <TruthBlock truth={result.truth} repairAttempted={result.repair_attempted} />
+          <GapsBlock gaps={result.gaps} report={result.report} />
+          <StrategyBlock strategy={result.strategy} />
+          <PreviewBlock tailored={result.tailored} />
+
+          <section className="rise rule-top pt-5" style={{ animationDelay: "300ms" }}>
+            <h2 className="label mb-4">Download</h2>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <button
+                onClick={download}
+                className="border border-ink bg-ink px-5 py-2.5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-paper-raised transition-colors hover:border-stamp hover:bg-stamp"
+              >
+                Download PDF
+              </button>
+              {!result.truth.passed && (
+                <span className="text-[0.8125rem] text-stamp">
+                  Fix the flagged lines before you send this anywhere.
                 </span>
-              ) : null}
-            </p>
-            <p className="mt-1.5 text-sm text-neutral-700">{PRESERVE_LABEL[src.preservable]}</p>
-            {src.notes.map((n, i) => (
-              <p key={i} className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                {n}
+              )}
+            </div>
+            {renderWarnings.map((w, i) => (
+              <p key={i} className="mt-3 text-[0.8125rem] text-caution">
+                {w}
               </p>
             ))}
-          </Section>
-
-          <Section title="Truthfulness check">
-            {result.truth.passed ? (
-              <p className="text-sm text-emerald-800">
-                Every line traces back to your uploaded resume. No invented metrics, technologies,
-                or employment details.
-                {result.repairAttempted && " (One draft was rejected and rewritten to get here.)"}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-red-800">
-                  {result.truth.errorCount} line(s) could not be traced to your resume. They are
-                  listed below so you can correct or remove them — do not send this out as is.
-                </p>
-                <ul className="space-y-1.5 text-xs">
-                  {result.truth.violations.map((v, i) => (
-                    <li key={i} className="rounded-md bg-red-50 px-3 py-2 text-red-900">
-                      <span className="font-mono text-[10px] font-semibold">{v.code}</span>{" "}
-                      <span className="text-red-700">{v.location}</span>
-                      <div className="mt-0.5">{v.detail}</div>
-                      <div className="mt-0.5 italic opacity-80">&ldquo;{v.offending}&rdquo;</div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Section>
-
-          <Section title="Gaps">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <h3 className="text-xs font-semibold uppercase text-neutral-500">
-                  Missing — cannot be claimed truthfully
-                </h3>
-                <ul className="mt-1.5 space-y-1 text-sm">
-                  {result.gaps.missing.map((m, i) => (
-                    <li key={i}>
-                      <span className="font-medium">{m.jdTerm}</span>{" "}
-                      <span className="text-xs text-neutral-500">({m.severity})</span>
-                      <div className="text-xs text-neutral-600">{m.note}</div>
-                    </li>
-                  ))}
-                  {result.gaps.missing.length === 0 && (
-                    <li className="text-sm text-neutral-500">Nothing material missing.</li>
-                  )}
-                </ul>
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold uppercase text-neutral-500">
-                  Recruiter concerns
-                </h3>
-                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-neutral-700">
-                  {result.gaps.recruiterConcerns.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </Section>
-
-          <Section title="What moved the match">
-            <ol className="list-decimal space-y-1.5 pl-4 text-sm text-neutral-700">
-              {result.report.topImprovements.map((t, i) => (
-                <li key={i}>
-                  <span className="font-medium">{t.change}</span> — {t.impact}
-                </li>
-              ))}
-            </ol>
-          </Section>
-
-          <Section title="Should you apply">
-            <p className="text-sm">
-              <span className="font-semibold">
-                {result.strategy.shouldApply.replace(/_/g, " ")}
-              </span>{" "}
-              — {result.strategy.fitEstimate}
-            </p>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div>
-                <dt className="text-xs font-semibold uppercase text-neutral-500">Biggest strength</dt>
-                <dd>{result.strategy.biggestStrength}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase text-neutral-500">Biggest gap</dt>
-                <dd>{result.strategy.biggestGap}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase text-neutral-500">
-                  Emphasise in interviews
-                </dt>
-                <dd>
-                  <ul className="list-disc pl-4">
-                    {result.strategy.interviewEmphasis.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase text-neutral-500">Cover letter</dt>
-                <dd>
-                  {result.strategy.coverLetterWorthwhile ? "Worth writing" : "Skip it"} —{" "}
-                  {result.strategy.coverLetterRationale}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase text-neutral-500">Outreach angle</dt>
-                <dd>{result.strategy.outreachAngle}</dd>
-              </div>
-            </dl>
-          </Section>
-
-          <Section title="Download">
-            <p className="mb-3 text-sm text-neutral-600">
-              Two audiences, two files. Send your own format to a human; upload the ATS layout to a
-              portal that parses it mechanically.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => download("preserve")}
-                disabled={!canPreserve || downloading !== null || !resumeFile}
-                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-              >
-                {downloading === "preserve" ? "Rendering…" : "Download in your format"}
-              </button>
-              <button
-                onClick={() => download("optimize")}
-                disabled={downloading !== null}
-                className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
-              >
-                {downloading === "optimize" ? "Rendering…" : "Download ATS layout"}
-              </button>
-            </div>
-            {!resumeFile && canPreserve && (
-              <p className="mt-2 text-xs text-neutral-500">
-                Format preservation needs the original file. Re-select it above — the server keeps
-                no copy of your resume.
-              </p>
-            )}
-            {!result.truth.passed && (
-              <p className="mt-2 text-xs text-red-700">
-                Fix the flagged lines before you send this anywhere.
-              </p>
-            )}
-
-            {fidelity && (
-              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700">
-                <p className="font-medium">Rendered {fidelity.filename}</p>
-                {fidelity.mode === "preserve-exact" && (
-                  <p className="mt-1">
-                    {fidelity.rewritten} of {fidelity.mapped} matched paragraphs rewritten in place.
-                    {fidelity.skipped ? ` ${fidelity.skipped} skipped (tables are left alone).` : ""}
-                    {fidelity.unplaced
-                      ? ` ${fidelity.unplaced} rewritten line(s) had no home paragraph and were left out — usually one original bullet split into two.`
-                      : ""}
-                  </p>
-                )}
-                {fidelity.mode === "preserve-visual" && (
-                  <p className="mt-1">
-                    Rebuilt from your measured style
-                    {fidelity.columns ? ` in ${fidelity.columns} column(s)` : ""}. This matches your
-                    design; it is not your original file.
-                  </p>
-                )}
-                {fidelity.convertWarning && (
-                  <p className="mt-1.5 text-amber-800">{fidelity.convertWarning}</p>
-                )}
-              </div>
-            )}
-          </Section>
+          </section>
         </div>
       )}
+
+      <footer className="mt-20 rule-top pt-5">
+        <p className="max-w-prose font-mono text-[0.6875rem] leading-relaxed text-ink-faint">
+          The score is an expert estimate of how this resume performs through a keyword-and-parse
+          screen plus a recruiter&apos;s first pass. It is not a reading from any commercial ATS,
+          and nothing here claims to be one.
+        </p>
+      </footer>
     </main>
   );
 }
