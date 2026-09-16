@@ -12,6 +12,7 @@ Run with both servers up:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 
@@ -295,10 +296,10 @@ def main() -> int:
         sent: dict = {}
 
         def capture(route):
-            try:
+            # A malformed body is not worth failing the capture over; the
+            # assertions below will report the empty payload instead.
+            with contextlib.suppress(Exception):
                 sent.update(route.request.post_data_json or {})
-            except Exception:
-                pass
             route.fulfill(
                 status=200,
                 content_type="application/pdf",
