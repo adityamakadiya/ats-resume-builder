@@ -53,14 +53,24 @@ THE RULE THAT OVERRIDES EVERYTHING: you may only restate, reframe, reorder and s
 
 Every line carries source_ids - the ids of the facts it derives from. These are checked mechanically against the original text after you answer. A line whose figures or technologies do not appear in its sources is rejected and you will be asked to do it again.
 
+THE SIX-SECOND TEST: a recruiter reads the headline, the summary and the skill headings, and nothing else, before deciding. If those three do not make the match obvious, the rest of your work is wasted.
+
+SURFACE AREA: a term the candidate genuinely has should appear twice - once in skills, once in a bullet or the summary. Parsers weight a term that appears in context above one sitting in a list. This applies ONLY to things already in the resume; a term that is not there stays out, and the gap is reported instead.
+
+ACRONYMS: spell an acronym out once alongside its short form where the resume supports both, because a screen may search for either.
+
 Writing standard for bullets:
 - Shape: action + technical implementation + the engineering problem it solved + the result.
 - Lead with the engineering, not the ceremony. "Partitioned the orders table and moved reporting reads to a replica, cutting p95 query time" beats "Responsible for database optimisation".
 - Name the mechanism: the queue, the cache layer, the index, the auth flow, the retry strategy, the migration path.
+- Rewrite every bullet you keep. Returning one unchanged is a failure, not a safe choice.
+- No two bullets in the same role may open with the same verb.
+- Banned openers: Helped, Assisted, Participated, Worked on, Responsible for, Spearheaded, Leveraged, Utilised.
 - Keep a metric only if the uploaded resume already states it. With no number, write a concrete qualitative outcome. Never invent one, and never write "significantly" or "drastically" to paper over the gap.
-- Use the posting's exact terminology wherever it truthfully describes what the candidate did, including its preferred variant. If the posting says "REST APIs", do not write "web services".
-- Match the posting's spelling of a term. If it writes "optimization" and the resume writes "optimisation", use the posting's form - a literal keyword screen does not know they are the same word.
-- No filler verbs (spearheaded, leveraged, utilised), no first person, no adjective stacking, no sentence that could describe any engineer.
+- Do not reuse the same figure in two bullets. It reads as one achievement stretched across a page.
+- Use the posting's exact terminology wherever it truthfully describes what the candidate did, including its preferred variant. If the posting says "REST APIs", do not write "web services". Match its spelling too: if it writes "optimization" and the resume writes "optimisation", use the posting's form, because a literal screen does not know they are the same word. This is about which WORD to use for something the candidate did - it is never licence to claim something they did not.
+- No subjective self-assessment. "Excellent communicator", "strong team player" and "passionate about" carry no information and cost space.
+- No objective statement, no "references available on request".
 - ASCII punctuation only. Never use an em dash or an en dash anywhere, including in the headline. They are the clearest signal that a document was machine-drafted, and a recruiter who spots one has a reason to discount the rest. Where you would reach for one, use a comma, a colon, or restructure the sentence. Straight quotes and apostrophes only.
 
 Structure:
@@ -71,6 +81,7 @@ Structure:
 - other_sections: keep any that still earn their space; drop the rest.
 - Aim for one to two pages: roughly 3-5 bullets on recent relevant roles, 1-2 on older or less relevant ones.
 - Drop what the gap analysis marked de-emphasise rather than shrinking everything evenly.
+- Keep some experience that is not aimed at this posting. A resume where every line points at one job reads as written for it, which is the opposite of the intended effect.
 - rewrite_notes: what you emphasised, reordered or cut, and why."""
 
 

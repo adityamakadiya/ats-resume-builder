@@ -246,8 +246,7 @@ def main() -> int:
 
         page.goto(BASE, wait_until="networkidle")
 
-        # Submit stays disabled until both inputs are present.
-        submit = page.get_by_role("button", name="Tailor and verify")
+        submit = page.get_by_role("button", name="Tailor", exact=True)
         check("submit is disabled before input", submit.is_disabled())
 
         page.locator("textarea").first.fill("Aditya Makadiya\nFull-stack engineer\n" + "x" * 300)
@@ -255,29 +254,81 @@ def main() -> int:
         check("submit enables once both inputs exist", submit.is_enabled())
 
         submit.click()
-        page.wait_for_selector("text=The rewrite", timeout=30_000)
+        page.wait_for_selector("text=Download PDF", timeout=30_000)
 
-        check("score is rendered", "72" in page.locator("h2:has-text('Match') + div").inner_text()
-              or page.get_by_text("72", exact=True).count() > 0)
-        check("verification stamp shows verified", page.get_by_text("Verified", exact=True).count() == 1)
-        check("repair note is surfaced", page.get_by_text("rejected and rewritten").count() == 1)
-        check("recoverable keyword is called out", page.get_by_text("Already true, currently missing.").count() == 1)
-        check("blocking gap is marked", page.get_by_text("blocking", exact=True).count() >= 1)
-        check("verdict chip renders", page.get_by_text("Apply, with caveats").count() == 1)
-        check("provenance trail is shown", page.get_by_text("← E1.B1").count() >= 1)
-        check("run summary records the completed steps",
-              page.get_by_text(f"{4} steps").count() == 1)
+        # The document is the page, and it is editable on arrival.
+        headline = page.get_by_label("Headline")
+        check("lands directly in the editor", headline.count() == 1)
+        check(
+            "headline carries the rewrite",
+            "Full Stack Engineer" in (headline.input_value() or ""),
+        )
+        check("score is on the rail", page.get_by_text("72", exact=True).count() >= 1)
+        check("verified state is shown", page.get_by_text("Verified", exact=True).count() == 1)
+
+        # Edit a bullet and confirm the edit is tracked and reaches the render.
+        bullet = page.get_by_label("Role 1 bullet 1")
+        bullet.fill("Hand edited bullet text for the export check.")
+        page.wait_for_timeout(200)
+        check("manual edit is counted", page.get_by_text("edited by you").count() == 1)
+
+        # Add and remove a skill.
+        add_skill = page.get_by_label("Add a skill to Backend")
+        add_skill.fill("Prisma")
+        add_skill.press("Enter")
+        page.wait_for_timeout(150)
+        # The chip is "Prisma ×", so an exact text match misses it; the chip's own
+        # remove control is the unambiguous signal that it rendered.
+        check("a skill can be added", page.get_by_label("Remove Prisma").count() == 1)
+        page.get_by_label("Remove Express").click()
+        page.wait_for_timeout(150)
+        check("a skill can be removed", page.get_by_label("Remove Express").count() == 0)
+
+        # Remove a bullet.
+        before = page.get_by_label("Role 1 bullet 2").count()
+        if before:
+            page.get_by_label("Remove bullet 2").click()
+            page.wait_for_timeout(150)
+        check("a bullet can be removed", page.get_by_label("Role 1 bullet 2").count() == 0)
+
+        # The render must receive the edited document, not the original draft.
+        sent: dict = {}
+
+        def capture(route):
+            try:
+                sent.update(route.request.post_data_json or {})
+            except Exception:
+                pass
+            route.fulfill(
+                status=200,
+                content_type="application/pdf",
+                headers={
+                    **CORS,
+                    "content-disposition": 'attachment; filename="Aditya-Makadiya-Resume-Acme-Payments.pdf"',
+                    "x-render-warnings": "",
+                },
+                body=tiny_pdf(),
+            )
+
+        page.unroute(f"{API}/api/render")
+        page.route(f"{API}/api/render", capture)
 
         with page.expect_download(timeout=15_000) as dl:
             page.get_by_role("button", name="Download PDF").click()
-        check("download fires with the server filename",
-              dl.value.suggested_filename == "Aditya-Makadiya-Resume-Acme-Payments.pdf",
-              dl.value.suggested_filename)
+        check(
+            "download uses the server filename",
+            dl.value.suggested_filename == "Aditya-Makadiya-Resume-Acme-Payments.pdf",
+            dl.value.suggested_filename,
+        )
+
+        rendered = json.dumps(sent.get("tailored", {}))
+        check("the PDF is rendered from the EDITED document", "Hand edited bullet text" in rendered)
+        check("removed skill is absent from the export", '"Express"' not in rendered)
+        check("added skill is present in the export", '"Prisma"' in rendered)
 
         page.screenshot(path="/tmp/fe-results.png", full_page=True)
         check("no console errors", not console_errors, "; ".join(console_errors[:3]))
 
-        # Mobile: nothing may overflow horizontally.
         page.set_viewport_size({"width": 390, "height": 900})
         page.wait_for_timeout(400)
         overflow = page.evaluate(
