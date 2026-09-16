@@ -258,3 +258,87 @@ def test_a_rewrite_may_reuse_a_capability_phrase_from_the_posting(tailored, fact
     raw = RAW + "\n- Cut manual publishing effort 45% with webhook-driven automation."
     report = run_truth_guard(draft, facts, raw, jd_terms=["workflow automation"])
     assert ViolationCode.UNSOURCED_TECH not in codes(report)
+
+
+def test_source_ids_are_matched_without_regard_to_case(tailored, facts):
+    """The model writes "summary" as often as "SUMMARY". Rejecting a correct
+    citation over its capitalisation bought a repair round for nothing, and the
+    eval suite hit it on the first run."""
+    draft = copy.deepcopy(tailored)
+    draft.summary.source_ids = ["summary", "e1.b1"]
+    draft.experience[0].source_id = "e1"
+    report = run_truth_guard(draft, facts, RAW)
+    assert ViolationCode.UNKNOWN_SOURCE_ID not in codes(report)
+    assert ViolationCode.ALTERED_EMPLOYER_FACT not in codes(report)
+
+
+def test_the_postings_term_for_something_the_resume_names_differently(tailored, facts):
+    """The prompt tells the model to prefer the posting's wording. The guard was
+    then rejecting it for doing so: a resume saying "role-based access" against a
+    posting saying "RBAC" is one claim, not two."""
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = "Implemented JWT auth and RBAC for admin tooling."
+    draft.experience[0].bullets[0].source_ids = ["E1.B1"]
+    raw = RAW + "\n- Implemented JWT authentication and role-based access for admin tooling."
+    report = run_truth_guard(draft, facts, raw, jd_terms=["RBAC", "JWT"])
+    assert ViolationCode.UNSOURCED_TECH not in codes(report)
+
+
+def test_morphology_does_not_count_as_fabrication(tailored, facts):
+    """Every remaining false rejection the eval suite found was a word form.
+
+    The posting says "settlements", the resume says "settlement". The posting
+    says "containerization", the resume says "Containerised". These are one
+    claim each, and rejecting the draft over them bought a repair round on
+    every single eval case.
+    """
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = (
+        "Containerization of four services, handling payout webhook retries for settlements."
+    )
+    draft.experience[0].bullets[0].source_ids = ["E1.B1"]
+    raw = (
+        RAW
+        + "\n- Containerised four services with Docker."
+        + "\n- Built a retry pipeline for failed payout webhooks on the settlement service."
+    )
+    report = run_truth_guard(
+        draft, facts, raw, jd_terms=["Containerization", "Webhooks", "Settlements"]
+    )
+    assert ViolationCode.UNSOURCED_TECH not in codes(report), [
+        v.detail for v in report.violations
+    ]
+
+
+def test_generic_and_domain_nouns_are_not_technologies():
+    """A posting naming its own business domain is describing the job, not a
+    tool a candidate could fake."""
+    vocabulary = set(build_vocabulary(["Queue", "Settlements", "Reconciliation", "Kafka"]))
+    assert "kafka" in vocabulary
+    for noun in ["queue", "settlements", "reconciliation"]:
+        assert noun not in vocabulary, f"{noun} is domain vocabulary, not a technology"
+
+
+def test_owning_a_tool_is_claiming_what_it_does(tailored, facts):
+    """A resume that says BullMQ has a job queue whether or not it writes the
+    word. The eval caught the guard rejecting the posting's word for a thing the
+    candidate demonstrably owns, which cost a repair round."""
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = "Built the retry queue for failed payouts."
+    draft.experience[0].bullets[0].source_ids = ["E1.B1"]
+    raw = RAW + "\n- Built a retry pipeline on BullMQ with exponential backoff."
+    report = run_truth_guard(draft, facts, raw, jd_terms=["Queue"])
+    assert ViolationCode.UNSOURCED_TECH not in codes(report), [
+        v.detail for v in report.violations
+    ]
+
+
+def test_implication_runs_one_way_only(tailored, facts):
+    """Owning BullMQ lets you say "queue". Saying "queue" does not let you claim
+    BullMQ, and a bidirectional rule would have opened exactly that hole."""
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets[0].text = "Built the payout pipeline on BullMQ."
+    draft.experience[0].bullets[0].source_ids = ["E1.B1"]
+    raw = RAW + "\n- Built a retry queue for failed payouts."
+    report = run_truth_guard(draft, facts, raw, jd_terms=["BullMQ"])
+    assert ViolationCode.UNSOURCED_TECH in codes(report)

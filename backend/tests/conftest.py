@@ -148,9 +148,16 @@ def facts() -> ResumeFacts:
 def tailored() -> TailoredResume:
     return TailoredResume(
         headline="Backend Engineer",
+        # Long enough to be representative: real runs produce 40-60 words, and a
+        # one-line fixture quietly understates what every scorer is judging.
         summary=TailoredSummary(
-            text="Backend engineer building REST APIs on Node.js and PostgreSQL for settlement.",
-            source_ids=["SUMMARY", "E1.B1"],
+            text=(
+                "Backend engineer with two years building REST APIs on Node.js and Express "
+                "for merchant settlement. Strongest in PostgreSQL query tuning and Redis "
+                "caching on read-heavy endpoints, having cut settlement lookup response "
+                "time by 45%."
+            ),
+            source_ids=["SUMMARY", "E1.B1", "E1.B2", "S1"],
         ),
         skills=[
             TailoredSkillGroup(

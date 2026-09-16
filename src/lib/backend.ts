@@ -229,6 +229,13 @@ async function unwrap<T>(response: Response): Promise<T> {
 
 /* ----------------------------------------------------------------- calls -- */
 
+export type ThemeList = { default: string; themes: Record<string, string> };
+
+/** Only themes that pass the backend's ATS checks are listed. */
+export async function listThemes(): Promise<ThemeList> {
+  return unwrap(await fetch(`${BASE}/api/themes`, { cache: "no-store" }));
+}
+
 export async function checkHealth(): Promise<{
   status: string;
   model: string;
@@ -272,11 +279,12 @@ export async function renderPdf(
   tailored: TailoredResume,
   facts: ResumeFacts,
   company: string,
+  theme = "",
 ): Promise<RenderedPdf> {
   const response = await fetch(`${BASE}/api/render`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tailored, facts, company }),
+    body: JSON.stringify({ tailored, facts, company, theme }),
   });
   if (!response.ok) await unwrap(response);
 

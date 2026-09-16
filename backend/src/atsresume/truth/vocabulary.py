@@ -76,7 +76,69 @@ ALIASES: dict[str, str] = {
     "spring boot": "spring",
     "k8s": "kubernetes",
     "gh actions": "github actions",
+    # The prompt tells the model to prefer the posting's term for something the
+    # candidate did. These are the pairs where that instruction collided with
+    # the guard: a resume saying "role-based access" and a posting saying "RBAC"
+    # are the same claim, and rejecting the rewrite for using the posting's
+    # word punished it for following its own brief.
+    "role-based access": "rbac",
+    "role based access": "rbac",
+    "access control": "rbac",
+    "github actions": "ci/cd",
+    "gitlab ci": "ci/cd",
+    "continuous integration": "ci/cd",
+    "ci cd": "ci/cd",
+    "json web token": "jwt",
+    "json web tokens": "jwt",
+    "rest api": "rest",
+    "rest apis": "rest",
+    "restful apis": "rest",
+    "message queue": "queue",
+    "background jobs": "queue",
+    "job queue": "queue",
 }
+
+
+# Naming a tool is claiming the capability it provides. A resume that says
+# BullMQ has a job queue whether or not it writes the word, and flagging the
+# posting's word for it was rejecting an honest draft. This is weaker than an
+# alias - the implication runs one way only - so it is applied to the corpus,
+# never to the rewrite: owning BullMQ lets you say "queue", but saying "queue"
+# does not let you claim BullMQ.
+IMPLIES: dict[str, tuple[str, ...]] = {
+    "bullmq": ("queue",),
+    "celery": ("queue",),
+    "sidekiq": ("queue",),
+    "rabbitmq": ("queue", "message broker"),
+    "kafka": ("queue", "message broker", "streaming"),
+    "sqs": ("queue",),
+    "pulsar": ("queue", "message broker"),
+    "nats": ("queue", "message broker"),
+    "redis": ("caching",),
+    "memcached": ("caching",),
+    "docker": ("containers", "containerisation"),
+    "kubernetes": ("containers", "orchestration"),
+    "github actions": ("ci/cd",),
+    "gitlab ci": ("ci/cd",),
+    "jenkins": ("ci/cd",),
+    "circleci": ("ci/cd",),
+    "prometheus": ("observability", "monitoring"),
+    "grafana": ("observability", "monitoring"),
+    "datadog": ("observability", "monitoring"),
+    "opentelemetry": ("observability", "tracing"),
+    "jwt": ("authentication",),
+    "oauth": ("authentication",),
+    "postgresql": ("sql", "relational database"),
+    "mysql": ("sql", "relational database"),
+}
+
+
+def implied_by(terms: set[str]) -> set[str]:
+    """Capabilities the candidate can honestly claim because of what they own."""
+    out: set[str] = set()
+    for term in terms:
+        out.update(IMPLIES.get(term, ()))
+    return out
 
 
 def canonical(term: str) -> str:
@@ -89,9 +151,18 @@ _DASHES = re.compile(r"[‐-―]")
 _SPACES = re.compile(r"\s+")
 
 
+_IZE = re.compile(r"(is|iz)(e|ed|es|ing|ation|ations)\b")
+
+
 def normalise(text: str) -> str:
-    """Lowercase and flatten the punctuation that varies between writers."""
+    """Lowercase, flatten punctuation, and settle the -ise/-ize argument.
+
+    A resume written in UK English against a posting written in US English is
+    making the same claim, and "containerised" against "containerization" was
+    rejecting real drafts.
+    """
     lowered = _DASHES.sub("-", text.lower())
+    lowered = _IZE.sub("is", lowered)
     return _SPACES.sub(" ", _PUNCT.sub(" ", lowered)).strip()
 
 
@@ -122,6 +193,10 @@ _GENERIC = frozenset(
         "multi", "tenant", "distributed", "real", "time", "high", "low", "level",
         "workflow", "automation", "monitoring", "logging", "deployment", "pipeline",
         "integration", "delivery", "quality", "ownership", "mentoring", "communication",
+        # Generic nouns and domain vocabulary. A posting naming its own business
+        # domain is describing the job, not a tool the candidate could fake.
+        "queue", "queues", "settlement", "settlements", "reconciliation", "payments",
+        "payouts", "billing", "onboarding", "compliance", "reporting", "analytics",
     }
 )
 
@@ -141,7 +216,10 @@ def build_vocabulary(jd_terms: list[str] | None = None) -> list[str]:
     a real run. A seeded term is at most two words and every word must look like
     a name - capitalised, or carrying a marker like a dot or a plus.
     """
-    terms = set(TECH_VOCABULARY)
+    # Alias keys have to be matchable, not just mapped. Without them a resume
+    # saying "role-based access" never registers as claiming RBAC at all, so the
+    # alias that was supposed to reconcile the two never gets a chance to fire.
+    terms = set(TECH_VOCABULARY) | set(ALIASES)
     for raw in jd_terms or []:
         term = raw.strip()
         if not (2 <= len(term) <= 30):
@@ -172,11 +250,21 @@ def _matcher(vocabulary: tuple[str, ...]) -> tuple[re.Pattern[str], dict[str, st
     by_normalised: dict[str, str] = {}
     for term in vocabulary:
         needle = normalise(term)
-        if len(needle) >= 2:
-            by_normalised.setdefault(needle, term)
+        if len(needle) < 2:
+            continue
+        by_normalised.setdefault(needle, term)
+        # Register the singular too, so a plural vocabulary term still matches a
+        # resume that wrote it singular.
+        for suffix in ("es", "s"):
+            if needle.endswith(suffix) and len(needle) - len(suffix) >= 3:
+                by_normalised.setdefault(needle[: -len(suffix)], term)
+                break
 
     ordered = sorted(by_normalised, key=len, reverse=True)
-    alternation = "|".join(re.escape(n) for n in ordered)
+    # A trailing plural is not a different technology. Matching "webhook"
+    # against a resume that wrote "webhooks" was rejecting honest drafts and
+    # buying a repair round each time.
+    alternation = "|".join(rf"{re.escape(n)}(?:e?s)?" for n in ordered)
     pattern = re.compile(rf"(?<![a-z0-9])({alternation})(?![a-z0-9])")
     return pattern, by_normalised
 
@@ -187,4 +275,14 @@ def terms_present(text: str, vocabulary: list[str]) -> set[str]:
         return set()
     pattern, by_normalised = _matcher(tuple(vocabulary))
     hay = normalise(text)
-    return {canonical(by_normalised[m]) for m in pattern.findall(hay) if m in by_normalised}
+    found: set[str] = set()
+    for match in pattern.findall(hay):
+        base = match
+        if base not in by_normalised:
+            for suffix in ("es", "s"):
+                if base.endswith(suffix) and base[: -len(suffix)] in by_normalised:
+                    base = base[: -len(suffix)]
+                    break
+        if base in by_normalised:
+            found.add(canonical(by_normalised[base]))
+    return found

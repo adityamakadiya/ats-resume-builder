@@ -5,6 +5,7 @@ import {
   ApiError,
   checkHealth,
   fetchJd,
+  listThemes,
   parseResume,
   renderPdf,
   tailor,
@@ -50,6 +51,8 @@ export default function Home() {
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [themes, setThemes] = useState<Record<string, string>>({});
+  const [theme, setTheme] = useState("");
 
   // The editor owns the document from the moment the rewrite lands, and the
   // renderer reads from it, so the PDF is always exactly what is on screen.
@@ -60,6 +63,12 @@ export default function Home() {
     checkHealth()
       .then((h) => setBackendUp(h.api_key_configured))
       .catch(() => setBackendUp(false));
+    listThemes()
+      .then((t) => {
+        setThemes(t.themes);
+        setTheme(t.default);
+      })
+      .catch(() => setThemes({}));
   }, []);
 
   const mark = useCallback((key: string, state: StepState) => {
@@ -120,7 +129,7 @@ export default function Home() {
     setDownloading(true);
     setError(null);
     try {
-      const pdf = await renderPdf(editor.doc, parsed.facts, result.job.company);
+      const pdf = await renderPdf(editor.doc, parsed.facts, result.job.company, theme);
       const url = URL.createObjectURL(pdf.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -154,6 +163,21 @@ export default function Home() {
               {result.job.company ? ` · ${result.job.company}` : ""}
             </p>
             <div className="flex shrink-0 items-center gap-3">
+              {Object.keys(themes).length > 0 && (
+                <select
+                  aria-label="PDF template"
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                  title="Every template here is checked to render single column with an extractable text layer"
+                  className="border border-rule-strong bg-paper-raised px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-ink-muted outline-none hover:border-ink focus:border-ink"
+                >
+                  {Object.entries(themes).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 onClick={() => setPhase("intake")}
                 className="font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint underline underline-offset-4 hover:text-ink"

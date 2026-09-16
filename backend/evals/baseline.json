@@ -1,0 +1,205 @@
+[
+  {
+    "case": "sparse-resume",
+    "findings": [
+      {
+        "scorer": "sections_preserved",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "employers_unchanged",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "bullets_were_rewritten",
+        "passed": true,
+        "value": 1.0,
+        "detail": "0/3 copied verbatim"
+      },
+      {
+        "scorer": "no_repeated_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "no_banned_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "ascii_only",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "summary_present",
+        "passed": true,
+        "value": 48.0,
+        "detail": "48 words"
+      },
+      {
+        "scorer": "keyword_coverage",
+        "passed": true,
+        "value": 0.0,
+        "detail": "0/21"
+      },
+      {
+        "scorer": "surfaced_twice",
+        "passed": true,
+        "value": 0.0,
+        "detail": "0/0 of matched terms"
+      }
+    ],
+    "ats_score": 23.8,
+    "guard_passed": true,
+    "expect_guard_pass": true,
+    "repair_attempted": true,
+    "seconds": 87.16390705108643,
+    "cost_usd": 0.19324560000000002,
+    "first_draft_violations": [
+      "UNSOURCED_TECH: 'node.js' is presented as the candidate's experience but is absent from the uploaded resume.",
+      "UNSOURCED_TECH: 'typescript' is presented as the candidate's experience but is absent from the uploaded resume."
+    ]
+  },
+  {
+    "case": "strong-match",
+    "findings": [
+      {
+        "scorer": "sections_preserved",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "employers_unchanged",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "bullets_were_rewritten",
+        "passed": true,
+        "value": 1.0,
+        "detail": "0/8 copied verbatim"
+      },
+      {
+        "scorer": "no_repeated_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "no_banned_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "ascii_only",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "summary_present",
+        "passed": true,
+        "value": 67.0,
+        "detail": "67 words"
+      },
+      {
+        "scorer": "keyword_coverage",
+        "passed": true,
+        "value": 0.5789473684210527,
+        "detail": "11/19"
+      },
+      {
+        "scorer": "surfaced_twice",
+        "passed": true,
+        "value": 0.8181818181818182,
+        "detail": "9/11 of matched terms"
+      }
+    ],
+    "ats_score": 71.7,
+    "guard_passed": true,
+    "expect_guard_pass": true,
+    "repair_attempted": false,
+    "seconds": 85.23001027107239,
+    "cost_usd": 0.1804441,
+    "first_draft_violations": []
+  },
+  {
+    "case": "weak-match",
+    "findings": [
+      {
+        "scorer": "sections_preserved",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "employers_unchanged",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "bullets_were_rewritten",
+        "passed": true,
+        "value": 1.0,
+        "detail": "0/7 copied verbatim"
+      },
+      {
+        "scorer": "no_repeated_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "no_banned_openers",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "ascii_only",
+        "passed": true,
+        "value": 1.0,
+        "detail": ""
+      },
+      {
+        "scorer": "summary_present",
+        "passed": true,
+        "value": 74.0,
+        "detail": "74 words"
+      },
+      {
+        "scorer": "keyword_coverage",
+        "passed": true,
+        "value": 0.0,
+        "detail": "0/18"
+      },
+      {
+        "scorer": "surfaced_twice",
+        "passed": true,
+        "value": 0.0,
+        "detail": "0/0 of matched terms"
+      }
+    ],
+    "ats_score": 25.0,
+    "guard_passed": true,
+    "expect_guard_pass": true,
+    "repair_attempted": true,
+    "seconds": 118.39539408683777,
+    "cost_usd": 0.2795226,
+    "first_draft_violations": [
+      "UNSOURCED_TECH: 'computer vision' is presented as the candidate's experience but is absent from the uploaded resume."
+    ]
+  }
+]

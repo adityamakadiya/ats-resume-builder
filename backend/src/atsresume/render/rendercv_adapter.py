@@ -178,6 +178,23 @@ def _markdown_safe(text: str) -> str:
     return (text or "").replace("\\", "/").replace("<", "\\<").replace(">", "\\>").strip()
 
 
+# Every one of these is verified by tests/test_render.py: rendered, read back
+# through this project's own PDF reader, and required to come out single column
+# with an extractable text layer and no word broken across a line. A theme that
+# cannot pass that is not offered, however good it looks.
+THEMES: dict[str, str] = {
+    "engineeringresumes": "Engineering resumes - dense, serif, the default",
+    "classic": "Classic - roomier, serif",
+    "engineeringclassic": "Engineering classic - ruled section headings",
+    "sb2nov": "sb2nov - compact sans",
+    "moderncv": "Modern CV - the LaTeX moderncv look",
+    "ember": "Ember - warm accent headings",
+    "harvard": "Harvard - plain and conservative",
+    "ink": "Ink - heavier type",
+    "opal": "Opal - light, airy spacing",
+}
+
+
 SECTION_TITLES = {
     "summary": "Summary",
     "skills": "Technical Skills",
@@ -312,9 +329,15 @@ def render_pdf(
             f"'{facts.contact.email.strip()}' did not parse as an email address and was left off."
         )
 
+    chosen = theme or settings.rendercv_theme
+    if chosen not in THEMES:
+        raise RenderError(
+            f"'{chosen}' is not an available theme. Choose one of: {', '.join(THEMES)}."
+        )
+
     document = {
         "cv": build_cv_dict(tailored, facts),
-        "design": {"theme": theme or settings.rendercv_theme},
+        "design": {"theme": chosen},
         "settings": {"render_command": {"dont_generate_png": True, "dont_generate_markdown": True}},
     }
 

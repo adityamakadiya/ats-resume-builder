@@ -19,6 +19,8 @@ import pytest
 from atsresume.ingest.pdf_layout import read_pdf
 from atsresume.models import Link
 from atsresume.render.rendercv_adapter import (
+    THEMES,
+    RenderError,
     _dates_block,
     _parse_date,
     _phone,
@@ -166,3 +168,31 @@ def test_a_resume_with_no_dates_still_renders(tailored, facts):
     draft.experience[0].end_date = "recently"
     result = render_pdf(draft, facts)
     assert result.pdf[:5] == b"%PDF-"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("theme", sorted(THEMES))
+def test_every_offered_theme_is_ats_clean(theme, tailored, facts):
+    """A theme is only on the menu if it survives this.
+
+    resumebench ships a two-column template flagged safe:false with the note
+    "Some parsers read it out of order". That is the failure this project
+    measured and built column detection to catch, so a theme that produces it
+    must not be offered however good it looks. Each one is rendered and then
+    read back through this project's own PDF reader.
+    """
+    result = render_pdf(tailored, facts, theme=theme)
+    layout = read_pdf(result.pdf)
+
+    assert layout.style.column_count == 1, f"{theme} renders in columns"
+    assert layout.page_count <= 2, f"{theme} runs to {layout.page_count} pages"
+    assert "Priya Nair" in layout.text, f"{theme} lost the candidate's name"
+    assert "Designed REST APIs on Node.js and Express" in layout.text, f"{theme} lost a bullet"
+    broken = [line for line in layout.text.split("\n") if line.endswith("-")]
+    assert not broken, f"{theme} breaks a word across a line: {broken[:2]}"
+
+
+def test_an_unknown_theme_is_refused_before_rendering(tailored, facts):
+    """Better a clear message than rendercv's own validation error."""
+    with pytest.raises(RenderError, match="not an available theme"):
+        render_pdf(tailored, facts, theme="sidebar")

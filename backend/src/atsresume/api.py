@@ -43,7 +43,7 @@ from .pipeline import (
     strategize,
     tailor_resume,
 )
-from .render.rendercv_adapter import RenderError, render_pdf
+from .render.rendercv_adapter import THEMES, RenderError, render_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class RenderRequest(BaseModel):
     tailored: TailoredResume
     facts: ResumeFacts
     company: str = ""
-    theme: str = Field(default="", description="rendercv theme; blank uses the configured default")
+    theme: str = Field(default="", description="One of /api/themes; blank uses the default")
 
 
 # --------------------------------------------------------------------------- #
@@ -195,6 +195,16 @@ def health() -> dict[str, Any]:
         "playwright_fallback": settings.enable_playwright_fallback,
         "cache_facts": settings.cache_facts,
     }
+
+
+@app.get("/api/themes")
+def themes() -> dict[str, Any]:
+    """The themes on offer, and which one is used when none is chosen.
+
+    Only themes that pass the ATS checks appear here, so a client can render the
+    list without having to know which are safe.
+    """
+    return {"default": get_settings().rendercv_theme, "themes": THEMES}
 
 
 @app.post("/api/resume/parse", response_model=ParseResponse)

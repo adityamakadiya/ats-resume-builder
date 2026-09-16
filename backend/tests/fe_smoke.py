@@ -229,6 +229,11 @@ def main() -> int:
                 body=json.dumps(payload),
             )
 
+        page.route(
+            f"{API}/api/themes",
+            stub({"default": "engineeringresumes",
+                  "themes": {"engineeringresumes": "Engineering resumes", "classic": "Classic"}}),
+        )
         page.route(f"{API}/api/resume/parse", stub(PARSE))
         page.route(f"{API}/api/jd/fetch", stub(JD))
         page.route(f"{API}/api/tailor", stub(TAILOR))
@@ -321,6 +326,13 @@ def main() -> int:
             "download uses the server filename",
             dl.value.suggested_filename == "Aditya-Makadiya-Resume-Acme-Payments.pdf",
             dl.value.suggested_filename,
+        )
+
+        check("template picker is offered", page.get_by_label("PDF template").count() == 1)
+        check(
+            "the chosen template reaches the render",
+            sent.get("theme") == "engineeringresumes",
+            str(sent.get("theme")),
         )
 
         rendered = json.dumps(sent.get("tailored", {}))

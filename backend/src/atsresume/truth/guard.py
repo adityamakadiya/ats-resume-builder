@@ -29,7 +29,23 @@ from ..models import (
     TruthViolation,
     ViolationCode,
 )
-from .vocabulary import build_vocabulary, normalise, terms_present
+from .vocabulary import build_vocabulary, implied_by, normalise, terms_present
+
+
+class _CaseInsensitiveIndex(dict):
+    """Fact ids, matched without regard to case."""
+
+    def __setitem__(self, key: str, value: str) -> None:
+        super().__setitem__(key.upper(), value)
+
+    def __getitem__(self, key: str) -> str:
+        return super().__getitem__(key.upper())
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and super().__contains__(key.upper())
+
+    def get(self, key: str, default=None):  # type: ignore[override]
+        return super().get(key.upper(), default)
 
 # Percentages, multipliers, durations, throughput, money, and any bare number of
 # two digits or more. Single bare digits are skipped on purpose: "3 microservices"
@@ -58,8 +74,13 @@ def _digits_of(value: str) -> str:
 
 
 def build_fact_index(facts: ResumeFacts) -> dict[str, str]:
-    """Every citable fact, by id."""
-    index: dict[str, str] = {}
+    """Every citable fact, by id.
+
+    Keys are upper-cased on lookup because the model writes "summary" as often
+    as "SUMMARY", and rejecting a correct citation over its capitalisation buys
+    a repair round for nothing.
+    """
+    index: _CaseInsensitiveIndex = _CaseInsensitiveIndex()
     if facts.summary:
         index["SUMMARY"] = facts.summary
     if facts.headline:
@@ -100,6 +121,9 @@ def run_truth_guard(
 
     corpus = normalise(" \n ".join(index.values()) + " \n " + raw_resume_text)
     corpus_tech = terms_present(corpus, vocabulary)
+    # Owning a tool is claiming what it does, so the corpus covers the
+    # capabilities its technologies imply as well as the names themselves.
+    corpus_tech |= implied_by(corpus_tech)
     corpus_digits = {d for d in (_digits_of(m) for m in _metrics(corpus)) if d}
 
     def check_line(location: str, text: str, source_ids: list[str]) -> None:
@@ -170,9 +194,9 @@ def run_truth_guard(
         check_line(location, text, source_ids)
 
     # Verifiable employment details must survive the rewrite untouched.
-    by_id = {exp.id: exp for exp in facts.experience}
+    by_id = {exp.id.upper(): exp for exp in facts.experience}
     for block in tailored.experience:
-        fact = by_id.get(block.source_id)
+        fact = by_id.get(block.source_id.upper())
         if fact is None:
             violations.append(
                 TruthViolation(
