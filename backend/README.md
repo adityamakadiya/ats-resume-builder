@@ -131,3 +131,12 @@ A full `/api/run` measured **~6.5 minutes** and roughly **$2** on
 - **Format preservation is out of scope here.** This backend renders the
   ATS-optimised layout only. The preservation work (DOCX exact text-swap, PDF
   style rebuild) lives in the TypeScript tree.
+
+## Playwright browser
+
+The Python package is installed with the dependencies; the browser binary is a
+separate download and the fallback is skipped cleanly without it:
+
+```bash
+./.venv/bin/playwright install chromium
+```
