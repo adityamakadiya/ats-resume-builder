@@ -1,0 +1,55 @@
+[project]
+name = "atsresume"
+version = "0.1.0"
+description = "Tailors a resume to one job description without inventing anything, and renders it ATS-clean."
+requires-python = ">=3.11"
+
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "python-multipart>=0.0.12",       # multipart/form-data uploads
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "anthropic>=0.40",
+  "pymupdf>=1.24",                  # PDF text with real fonts, flags and colours
+  "python-docx>=1.1",               # DOCX paragraph text
+  "httpx>=0.27",                    # JD fetching
+  "selectolax>=0.3.21",             # fast HTML parsing for JD pages
+  "rendercv[full]>=2.8",            # Typst-backed ATS-clean PDF rendering
+  "pyyaml>=6.0",
+  "playwright>=1.48",               # fallback for client-rendered JD pages
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "respx>=0.21",                    # httpx mocking
+  "ruff>=0.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atsresume"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+  "slow: exercises a real subprocess render (a few seconds each)",
+  "live: calls the Anthropic API and costs money; deselected by default",
+]
+addopts = "-m 'not live'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
