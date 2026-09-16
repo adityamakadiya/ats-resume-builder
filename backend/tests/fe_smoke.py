@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
 
 import pymupdf
 from playwright.sync_api import sync_playwright
 
-BASE = "http://localhost:3000"
+BASE = os.environ.get("FE_BASE", "http://localhost:3001")
 API = "http://localhost:8000"
 
 FACTS = {

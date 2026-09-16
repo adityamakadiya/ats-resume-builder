@@ -97,6 +97,10 @@ cp .env.example .env.local        # add your ANTHROPIC_API_KEY
 ./.venv/bin/uvicorn atsresume.api:app --reload --port 8000
 ```
 
+The frontend may run on port 3000 or 3001; both are in the default CORS
+allowlist. For any other origin set `CORS_ORIGINS` in `.env.local`, or the
+browser blocks every request while the server logs stay clean.
+
 ## Tests
 
 ```bash

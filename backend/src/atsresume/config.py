@@ -102,7 +102,9 @@ class Settings(BaseSettings):
     render_timeout_s: float = 120.0
     rendercv_theme: str = "engineeringresumes"
 
-    cors_origins: str = "http://localhost:3000"
+    # Both common dev ports, because moving the frontend and forgetting this
+    # produces a browser-only failure that the server logs never show.
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
     def step(self, name: str) -> StepConfig:
         return PROFILES[self.profile][name]
