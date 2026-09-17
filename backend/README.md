@@ -165,6 +165,30 @@ Resume facts are cached on disk by a hash of the extracted text, so the second
 posting you run against the same resume skips extraction entirely (~25s and a
 model call). `CACHE_FACTS=false` disables it.
 
+## History
+
+Runs are stored in SQLite at `~/.atsresume/atsresume.db` (`DB_PATH` to move it).
+Nothing used to survive a request: every tailored resume was thrown away when
+the browser moved on, and the facts cache lived in a temp directory the
+operating system clears.
+
+| Endpoint | |
+|---|---|
+| `GET /api/runs` | history, newest first |
+| `GET /api/runs/{id}` | the whole run, so the editor reopens it as it was left |
+| `PATCH /api/runs/{id}` | save edits, application status, notes |
+| `DELETE /api/runs/{id}` | remove one |
+
+One resume against many postings stores the resume once and the runs against
+it, which is the shape the tool is actually used in. Deleting a run leaves the
+resume. The original text is kept alongside the extracted facts because the
+truth guard checks the rewrite against what the resume actually said, and
+reconstructing that from facts loses whatever the extractor dropped.
+
+The editor auto-saves about a second after you stop typing. Losing a hand-edited
+resume to a refresh is the failure this exists to prevent, so it saves itself
+rather than asking.
+
 ## Known limits
 
 - **No progress streaming inside a step.** The client gets real progress across

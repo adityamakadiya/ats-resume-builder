@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sys
 
 import pymupdf
@@ -74,6 +75,7 @@ PARSE = {
         "notes": [],
     },
     "facts": FACTS,
+    "resume_id": 1,
 }
 
 JD = {
@@ -86,6 +88,7 @@ JD = {
 }
 
 TAILOR = {
+    "run_id": 7,
     "job": {
         "company": "Acme Payments",
         "title": "Senior Full Stack Engineer",
@@ -230,6 +233,13 @@ def main() -> int:
             )
 
         page.route(
+            f"{API}/api/runs",
+            stub({"runs": [], "statuses": ["draft", "applied", "rejected"]}),
+        )
+        page.route(re.compile(rf"{re.escape(API)}/api/runs/\d+"),
+                   lambda route: route.fulfill(status=200, headers=CORS,
+                                               content_type="application/json", body="{}"))
+        page.route(
             f"{API}/api/themes",
             stub({"default": "engineeringresumes",
                   "themes": {"engineeringresumes": "Engineering resumes", "classic": "Classic"}}),
@@ -329,6 +339,7 @@ def main() -> int:
         )
 
         check("template picker is offered", page.get_by_label("PDF template").count() == 1)
+        check("application status is offered", page.get_by_label("Application status").count() == 1)
         check(
             "the chosen template reaches the render",
             sent.get("theme") == "engineeringresumes",

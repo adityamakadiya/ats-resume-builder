@@ -158,7 +158,7 @@ export type Strategy = {
   top_improvements: string[];
 };
 
-export type ParseResponse = { source: SourceDocument; facts: ResumeFacts };
+export type ParseResponse = { source: SourceDocument; facts: ResumeFacts; resume_id: number };
 
 export type JdResponse = {
   text: string;
@@ -169,7 +169,35 @@ export type JdResponse = {
   block_reason: string;
 };
 
+export type RunSummary = {
+  id: number;
+  company: string;
+  title: string;
+  ats_score: number;
+  guard_passed: boolean;
+  status: string;
+  created_at: number;
+  candidate: string;
+};
+
+export type RunDetail = {
+  id: number;
+  company: string;
+  title: string;
+  status: string;
+  notes: string;
+  facts: ResumeFacts;
+  job: JobSpec;
+  gaps: GapAnalysis;
+  tailored: TailoredResume;
+  truth: TruthReport;
+  report: AtsReport;
+  strategy: Strategy;
+  repair_attempted: boolean;
+};
+
 export type TailorResponse = {
+  run_id: number;
   job: JobSpec;
   gaps: GapAnalysis;
   tailored: TailoredResume;
@@ -260,7 +288,7 @@ export async function fetchJd(input: { url?: string; text?: string }): Promise<J
 }
 
 export async function tailor(
-  facts: ResumeFacts,
+  resumeId: number,
   jdText: string,
   sourceNote: string,
 ): Promise<TailorResponse> {
@@ -268,9 +296,35 @@ export async function tailor(
     await fetch(`${BASE}/api/tailor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ facts, jd_text: jdText, source_note: sourceNote }),
+      body: JSON.stringify({ resume_id: resumeId, jd_text: jdText, source_note: sourceNote }),
     }),
   );
+}
+
+export async function listRuns(): Promise<{ runs: RunSummary[]; statuses: string[] }> {
+  return unwrap(await fetch(`${BASE}/api/runs`, { cache: "no-store" }));
+}
+
+export async function getRun(id: number): Promise<RunDetail> {
+  return unwrap(await fetch(`${BASE}/api/runs/${id}`, { cache: "no-store" }));
+}
+
+/** Saves the edited document and application status back to the run. */
+export async function patchRun(
+  id: number,
+  patch: { tailored?: TailoredResume; status?: string; notes?: string },
+): Promise<void> {
+  await unwrap(
+    await fetch(`${BASE}/api/runs/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
+export async function deleteRun(id: number): Promise<void> {
+  await unwrap(await fetch(`${BASE}/api/runs/${id}`, { method: "DELETE" }));
 }
 
 export type RenderedPdf = { blob: Blob; filename: string; warnings: string[] };

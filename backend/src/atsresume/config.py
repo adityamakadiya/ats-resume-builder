@@ -93,7 +93,10 @@ class Settings(BaseSettings):
     # identical text every time is the easiest money in the pipeline to stop
     # spending.
     cache_facts: bool = True
-    cache_dir: str = ""
+    # Deliberately not a temp directory. The previous cache lived in one and the
+    # operating system cleared it, which meant the only state in the system was
+    # state that quietly disappeared.
+    db_path: str = "~/.atsresume/atsresume.db"
 
     jd_fetch_timeout_s: float = 20.0
     # A reader service renders the page on its own infrastructure, which is the

@@ -197,3 +197,86 @@ def test_facts_model_round_trips_through_json():
     drop sections between analysis and render."""
     original = ResumeFacts(contact=Contact(name="Priya"), total_years_experience=2.5)
     assert ResumeFacts.model_validate(original.model_dump(mode="json")) == original
+
+
+@pytest.fixture
+def temp_db(tmp_path, monkeypatch):
+    from atsresume import store
+    from atsresume.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "db_path", str(tmp_path / "api.db"))
+    store.init()
+    return store
+
+
+def test_parse_returns_a_resume_id(client, monkeypatch, facts, temp_db):
+    """The id is what lets /api/tailor look the resume up instead of having the
+    client ship the whole facts blob back on every call."""
+    monkeypatch.setattr(api, "extract_resume_facts", lambda text: facts)
+    body = client.post("/api/resume/parse", data={"resume_text": RESUME_TEXT}).json()
+    assert body["resume_id"] > 0
+    assert temp_db.get_resume(body["resume_id"]) is not None
+
+
+def test_tailor_rejects_an_unknown_resume_id(client, temp_db):
+    response = client.post(
+        "/api/tailor", json={"resume_id": 9999, "jd_text": "x" * 500}
+    )
+    assert response.status_code == 404
+
+
+def test_tailor_requires_one_of_id_or_facts(client, temp_db):
+    response = client.post("/api/tailor", json={"jd_text": "x" * 500})
+    assert response.status_code == 400
+
+
+def test_runs_history_is_empty_before_anything_runs(client, temp_db):
+    body = client.get("/api/runs").json()
+    assert body["runs"] == []
+    assert "applied" in body["statuses"]
+
+
+def test_a_saved_run_can_be_listed_reopened_and_updated(client, facts, tailored, temp_db):
+    from tests.test_store import _run_kwargs
+
+    run_id = temp_db.save_run(**_run_kwargs(facts, tailored))
+
+    listed = client.get("/api/runs").json()["runs"]
+    assert len(listed) == 1 and listed[0]["id"] == run_id
+
+    detail = client.get(f"/api/runs/{run_id}").json()
+    assert detail["tailored"]["headline"] == tailored.headline
+
+    edited = tailored.model_dump(mode="json")
+    edited["experience"][0]["bullets"][0]["text"] = "Edited through the API."
+    patched = client.patch(
+        f"/api/runs/{run_id}", json={"tailored": edited, "status": "applied"}
+    )
+    assert patched.status_code == 200
+
+    reopened = client.get(f"/api/runs/{run_id}").json()
+    assert reopened["tailored"]["experience"][0]["bullets"][0]["text"] == "Edited through the API."
+    assert reopened["status"] == "applied"
+
+
+def test_an_unknown_status_is_refused(client, facts, tailored, temp_db):
+    from tests.test_store import _run_kwargs
+
+    run_id = temp_db.save_run(**_run_kwargs(facts, tailored))
+    response = client.patch(f"/api/runs/{run_id}", json={"status": "ghosted"})
+    assert response.status_code == 400
+    assert "Unknown status" in response.json()["detail"]
+
+
+def test_missing_runs_are_404_not_500(client, temp_db):
+    assert client.get("/api/runs/9999").status_code == 404
+    assert client.patch("/api/runs/9999", json={"status": "applied"}).status_code == 404
+    assert client.delete("/api/runs/9999").status_code == 404
+
+
+def test_a_run_can_be_deleted(client, facts, tailored, temp_db):
+    from tests.test_store import _run_kwargs
+
+    run_id = temp_db.save_run(**_run_kwargs(facts, tailored))
+    assert client.delete(f"/api/runs/{run_id}").status_code == 200
+    assert client.get(f"/api/runs/{run_id}").status_code == 404

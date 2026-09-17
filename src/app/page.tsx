@@ -5,11 +5,15 @@ import {
   ApiError,
   checkHealth,
   fetchJd,
+  getRun,
+  listRuns,
   listThemes,
+  patchRun,
   parseResume,
   renderPdf,
   tailor,
   type ParseResponse,
+  type RunSummary,
   type TailorResponse,
 } from "@/lib/backend";
 import { ResumeEditor, useResumeEditor } from "./_components/editor";
@@ -53,11 +57,25 @@ export default function Home() {
   const [downloading, setDownloading] = useState(false);
   const [themes, setThemes] = useState<Record<string, string>>({});
   const [theme, setTheme] = useState("");
+  const [history, setHistory] = useState<RunSummary[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [runId, setRunId] = useState<number | null>(null);
+  const [status, setStatus] = useState("draft");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   // The editor owns the document from the moment the rewrite lands, and the
   // renderer reads from it, so the PDF is always exactly what is on screen.
   const editor = useResumeEditor(EMPTY_DOC);
   const resetEditor = editor.reset;
+
+  function refreshHistory() {
+    listRuns()
+      .then((r) => {
+        setHistory(r.runs);
+        setStatuses(r.statuses);
+      })
+      .catch(() => setHistory([]));
+  }
 
   useEffect(() => {
     checkHealth()
@@ -69,6 +87,7 @@ export default function Home() {
         setTheme(t.default);
       })
       .catch(() => setThemes({}));
+    refreshHistory();
   }, []);
 
   const mark = useCallback((key: string, state: StepState) => {
@@ -101,14 +120,17 @@ export default function Home() {
       mark("jd", "done");
 
       mark("tailor", "active");
-      const tailored = await tailor(parseResult.facts, jd.text, jd.source_note);
+      const tailored = await tailor(parseResult.resume_id, jd.text, jd.source_note);
       setResult(tailored);
+      setRunId(tailored.run_id);
+      setStatus("draft");
       resetEditor(tailored.tailored);
       mark("tailor", "done");
       // Rendering now happens on demand, against whatever you have edited.
       mark("render", "done");
 
       setPhase("editing");
+      refreshHistory();
     } catch (err) {
       setStates((prev) => {
         const next = { ...prev };
@@ -121,6 +143,53 @@ export default function Home() {
     } finally {
       setStartedAt(null);
     }
+  }
+
+  /* Debounced auto-save. Typing into a resume and losing it to a refresh is
+     the failure this exists to prevent, so it saves itself rather than asking. */
+  useEffect(() => {
+    if (runId === null || phase !== "editing" || editor.editedKeys.size === 0) return;
+    const timer = setTimeout(() => {
+      setSaveState("saving");
+      patchRun(runId, { tailored: editor.doc })
+        .then(() => setSaveState("saved"))
+        .catch(() => setSaveState("idle"));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [editor.doc, editor.editedKeys.size, runId, phase]);
+
+  async function openRun(id: number) {
+    setError(null);
+    try {
+      const detail = await getRun(id);
+      setParsed({
+        source: { kind: "text", raw_text: "", page_count: 0, style: null, notes: [] },
+        facts: detail.facts,
+        resume_id: 0,
+      });
+      setResult({
+        run_id: detail.id,
+        job: detail.job,
+        gaps: detail.gaps,
+        tailored: detail.tailored,
+        truth: detail.truth,
+        report: detail.report,
+        strategy: detail.strategy,
+        repair_attempted: detail.repair_attempted,
+      });
+      resetEditor(detail.tailored);
+      setRunId(detail.id);
+      setStatus(detail.status);
+      setSaveState("saved");
+      setPhase("editing");
+    } catch (err) {
+      setError({ message: (err as Error).message });
+    }
+  }
+
+  function changeStatus(next: string) {
+    setStatus(next);
+    if (runId !== null) patchRun(runId, { status: next }).then(refreshHistory).catch(() => {});
   }
 
   /** Renders what is in the editor, not the draft the model produced. */
@@ -157,19 +226,39 @@ export default function Home() {
     return (
       <main className="min-h-full">
         <div className="sticky top-0 z-10 border-b border-rule bg-paper/95 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-2.5">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-2.5">
             <p className="truncate font-mono text-[0.6875rem] uppercase tracking-wider text-ink-muted">
               {result.job.title}
               {result.job.company ? ` · ${result.job.company}` : ""}
             </p>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <span
+                className="font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint"
+                aria-live="polite"
+              >
+                {saveState === "saving" ? "saving" : saveState === "saved" ? "saved" : ""}
+              </span>
+              {statuses.length > 0 && (
+                <select
+                  aria-label="Application status"
+                  value={status}
+                  onChange={(e) => changeStatus(e.target.value)}
+                  className="max-w-[7rem] border border-rule-strong bg-paper-raised px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-ink-muted outline-none hover:border-ink focus:border-ink"
+                >
+                  {statuses.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              )}
               {Object.keys(themes).length > 0 && (
                 <select
                   aria-label="PDF template"
                   value={theme}
                   onChange={(e) => setTheme(e.target.value)}
                   title="Every template here is checked to render single column with an extractable text layer"
-                  className="border border-rule-strong bg-paper-raised px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-ink-muted outline-none hover:border-ink focus:border-ink"
+                  className="max-w-[9rem] truncate border border-rule-strong bg-paper-raised px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-ink-muted outline-none hover:border-ink focus:border-ink"
                 >
                   {Object.entries(themes).map(([key, label]) => (
                     <option key={key} value={key}>
@@ -324,6 +413,37 @@ export default function Home() {
           <p className="text-[0.875rem] text-ink">{error.message}</p>
           {error.hint && <p className="mt-1 text-[0.8125rem] text-ink-muted">{error.hint}</p>}
         </div>
+      )}
+
+      {history.length > 0 && phase !== "working" && (
+        <section className="rise mt-12 rule-top pt-5" style={{ animationDelay: "160ms" }}>
+          <h2 className="label mb-3">Earlier</h2>
+          <ul>
+            {history.map((run) => (
+              <li key={run.id}>
+                <button
+                  onClick={() => openRun(run.id)}
+                  className="group flex w-full items-baseline justify-between gap-4 border-b border-rule py-2 text-left hover:bg-paper-sunk/50"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[0.875rem] text-ink">
+                    {run.title || "Untitled"}
+                    {run.company && <span className="text-ink-faint"> · {run.company}</span>}
+                  </span>
+                  <span className="shrink-0 font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint">
+                    {run.status}
+                  </span>
+                  <span
+                    className={`shrink-0 font-mono text-[0.6875rem] tabular-nums ${
+                      run.ats_score >= 70 ? "text-verified" : "text-ink-muted"
+                    }`}
+                  >
+                    {Math.round(run.ats_score)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </main>
   );

@@ -12,6 +12,7 @@ subprocess on the loop would stall every other request in flight.
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -20,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import __version__
+from . import __version__, store
 from .config import PROFILES, get_settings
 from .ingest.jd import JdFetchError, clamp_jd_text, fetch_jd
 from .ingest.resume import ResumeIngestError, ingest_resume, ingest_resume_text
@@ -46,6 +47,8 @@ from .pipeline import (
 from .render.rendercv_adapter import THEMES, RenderError, render_pdf
 
 logger = logging.getLogger(__name__)
+
+store.init()
 
 app = FastAPI(
     title="ATS Resume Builder",
@@ -79,6 +82,7 @@ app.add_middleware(
 class ParseResponse(BaseModel):
     source: SourceDocument
     facts: ResumeFacts
+    resume_id: int
 
 
 class JdResponse(BaseModel):
@@ -110,12 +114,17 @@ class TailorRequest(BaseModel):
     five-minute request can only be reported as a spinner.
     """
 
-    facts: ResumeFacts
+    # Either identifies a stored resume, or carries the facts directly for a
+    # client that has them. resume_id is preferred: it keeps the request small
+    # and lets the run be attributed to a resume in the history.
+    resume_id: int | None = None
+    facts: ResumeFacts | None = None
     jd_text: str
     source_note: str = "pasted by the candidate"
 
 
 class TailorResponse(BaseModel):
+    run_id: int
     job: JobSpec
     gaps: GapAnalysis
     tailored: TailoredResume
@@ -147,6 +156,27 @@ async def _read_resume(file: UploadFile | None, text: str) -> SourceDocument:
         status_code=400,
         detail="Upload a resume file, or paste the resume text.",
     )
+
+
+def _resolve_resume(request: TailorRequest) -> tuple[ResumeFacts, str]:
+    """A stored resume by id, or facts supplied inline.
+
+    The raw text matters beyond identification: the truth guard checks the
+    rewrite against what the resume actually said, and reconstructing that from
+    the extracted facts alone loses anything the extractor dropped.
+    """
+    if request.resume_id is not None:
+        stored = store.get_resume(request.resume_id)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="No such resume. Upload it again.")
+        return stored
+
+    if request.facts is None:
+        raise HTTPException(status_code=400, detail="Provide resume_id or facts.")
+
+    from .pipeline.scoring import facts_text_of
+
+    return request.facts, facts_text_of(request.facts)
 
 
 async def _read_jd(url: str, text: str) -> tuple[str, str]:
@@ -215,7 +245,8 @@ async def parse_resume(
     """Part 1: a resume in, structured facts out."""
     source = await _read_resume(resume, resume_text)
     facts = await run_in_threadpool(extract_resume_facts, source.raw_text)
-    return ParseResponse(source=source, facts=facts)
+    resume_id = await run_in_threadpool(store.put_facts, source.raw_text, facts)
+    return ParseResponse(source=source, facts=facts, resume_id=resume_id)
 
 
 @app.post("/api/jd/fetch", response_model=JdResponse)
@@ -280,18 +311,43 @@ async def tailor(request: TailorRequest) -> TailorResponse:
     extractor dropped is not in it — which makes the guard marginally stricter
     here than in ``/api/run``. Stricter is the safe direction.
     """
-    from .pipeline.scoring import compute_ats_report, facts_text_of
+    import time
 
+    from .llm import current_usage, start_usage
+    from .pipeline.scoring import compute_ats_report
+
+    facts, raw_text = _resolve_resume(request)
     jd_text = clamp_jd_text(request.jd_text)
+
+    started = time.time()
+    start_usage()
     job = await run_in_threadpool(extract_job_spec, jd_text, request.source_note)
-    gaps = await run_in_threadpool(analyze_gaps, job, request.facts)
-    outcome = await run_in_threadpool(
-        tailor_resume, job, request.facts, gaps, facts_text_of(request.facts)
-    )
-    report = compute_ats_report(job, request.facts, outcome.tailored)
+    gaps = await run_in_threadpool(analyze_gaps, job, facts)
+    outcome = await run_in_threadpool(tailor_resume, job, facts, gaps, raw_text)
+    report = compute_ats_report(job, facts, outcome.tailored)
     strategy = await run_in_threadpool(strategize, job, gaps, outcome.tailored, report)
+    usage = current_usage()
+
+    run_id = await run_in_threadpool(
+        lambda: store.save_run(
+            raw_text=raw_text,
+            facts=facts,
+            job=job,
+            gaps=gaps,
+            tailored=outcome.tailored,
+            truth=outcome.truth,
+            report=report,
+            strategy=strategy,
+            jd_text=jd_text,
+            jd_source=request.source_note,
+            repair_attempted=outcome.repair_attempted,
+            seconds=time.time() - started,
+            cost_usd=usage.cost_usd if usage else 0.0,
+        )
+    )
 
     return TailorResponse(
+        run_id=run_id,
         job=job,
         gaps=gaps,
         tailored=outcome.tailored,
@@ -300,6 +356,59 @@ async def tailor(request: TailorRequest) -> TailorResponse:
         strategy=strategy,
         repair_attempted=outcome.repair_attempted,
     )
+
+
+class RunPatch(BaseModel):
+    tailored: TailoredResume | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+@app.get("/api/runs")
+async def runs(limit: int = 50) -> dict[str, Any]:
+    """History. Every tailored resume used to vanish when the browser moved on."""
+    summaries = await run_in_threadpool(store.list_runs, min(max(limit, 1), 200))
+    return {"runs": [asdict(s) for s in summaries], "statuses": list(store.STATUSES)}
+
+
+@app.get("/api/runs/{run_id}")
+async def run_detail(run_id: int) -> dict[str, Any]:
+    """The whole run, so the editor can reopen it exactly as it was left."""
+    found = await run_in_threadpool(store.get_run, run_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="No such run.")
+    return found
+
+
+@app.patch("/api/runs/{run_id}")
+async def patch_run(run_id: int, patch: RunPatch) -> dict[str, Any]:
+    """Save edits and application status.
+
+    This is what makes a hand-edited resume survive a refresh, and what turns a
+    list of runs into a record of where each application actually got to.
+    """
+    if patch.status is not None and patch.status not in store.STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown status. Use one of: {', '.join(store.STATUSES)}.",
+        )
+    ok = await run_in_threadpool(
+        store.update_run,
+        run_id,
+        tailored=patch.tailored,
+        status=patch.status,
+        notes=patch.notes,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="No such run.")
+    return {"ok": True}
+
+
+@app.delete("/api/runs/{run_id}")
+async def remove_run(run_id: int) -> dict[str, Any]:
+    if not await run_in_threadpool(store.delete_run, run_id):
+        raise HTTPException(status_code=404, detail="No such run.")
+    return {"ok": True}
 
 
 @app.post(

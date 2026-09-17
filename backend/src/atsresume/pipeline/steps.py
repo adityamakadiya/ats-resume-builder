@@ -6,7 +6,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from .. import cache
+from .. import store
 from ..llm import structured
 from ..models import (
     AtsReport,
@@ -30,7 +30,7 @@ def _block(tag: str, body: str) -> str:
 
 
 def extract_resume_facts(raw_resume_text: str) -> ResumeFacts:
-    cached = cache.get(raw_resume_text)
+    cached = store.get_facts(raw_resume_text)
     if cached is not None:
         return cached
 
@@ -41,7 +41,7 @@ def extract_resume_facts(raw_resume_text: str) -> ResumeFacts:
         schema=ResumeFacts,
         step="extract",
     )
-    cache.put(raw_resume_text, facts)
+    store.put_facts(raw_resume_text, facts)
     return facts
 
 
