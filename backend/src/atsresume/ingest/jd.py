@@ -66,6 +66,13 @@ WALL_MARKERS = (
     "enable cookies",
     "this page isn't available",
     "recaptcha required",
+    # Cloudflare's interstitial. The reader renders it happily and returns 200,
+    # so without this an Indeed link comes back as a challenge page dressed up
+    # as a job description.
+    "just a moment",
+    "checking your browser",
+    "verify you are human",
+    "enable javascript and cookies to continue",
 )
 
 # A real job description is long. A login wall or an empty SPA shell is not.
@@ -242,8 +249,19 @@ def fetch_jd(url: str) -> JdFetchResult:
             return _blocked(url, portal, f"Could not reach the page ({exc}).", "http")
 
         if response.status_code >= 400:
+            # A hard refusal is exactly when rendering elsewhere helps: Indeed
+            # answers 401 and Glassdoor 403 to anything without a browser
+            # session. Returning here meant the reader tier never ran for the
+            # two portals most likely to need it.
+            rendered = _fetch_via_reader(url)
+            if rendered is not None:
+                return JdFetchResult(text=rendered, url=url, portal=portal, method="reader")
             return _blocked(
-                url, portal, f"{portal} returned HTTP {response.status_code}.", "http"
+                url,
+                portal,
+                f"{portal} returned HTTP {response.status_code}, and the reader could not "
+                "render the posting either. Copy the description and paste it instead.",
+                "http",
             )
 
         html = response.text

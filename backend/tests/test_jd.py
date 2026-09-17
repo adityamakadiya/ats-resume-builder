@@ -159,7 +159,10 @@ def test_a_thin_page_is_not_mistaken_for_a_posting(monkeypatch):
 def test_http_error_is_reported_not_raised():
     url = "https://example.com/job/3"
     respx.get(url).mock(return_value=httpx.Response(503))
-    result = fetch_jd(url)  # an HTTP error short-circuits before the reader
+    # The reader is tried on an HTTP error too; when it also fails, the original
+    # status is still what the candidate is told.
+    respx.get(f"{READER}{url}").mock(return_value=httpx.Response(502))
+    result = fetch_jd(url)
     assert result.blocked
     assert "503" in result.block_reason
 
@@ -259,3 +262,33 @@ def test_the_reader_can_be_switched_off(monkeypatch):
     result = fetch_jd(url)
     assert result.blocked
     assert not route.called, "no URL should leave the process when the reader is off"
+
+
+@respx.mock
+def test_an_http_refusal_still_tries_the_reader():
+    """Indeed answers 401 and Glassdoor 403 to anything without a browser
+    session, which is exactly when rendering elsewhere helps. Returning on the
+    status code meant the reader never ran for the two portals most likely to
+    need it."""
+    url = "https://in.indeed.com/viewjob?jk=abc123"
+    respx.get(url).mock(return_value=httpx.Response(401))
+    respx.get(f"{READER}{url}").mock(return_value=httpx.Response(200, text=reader_body(JD_BODY)))
+
+    result = fetch_jd(url)
+    assert not result.blocked
+    assert result.method == "reader"
+
+
+@respx.mock
+def test_a_cloudflare_challenge_is_not_a_job_description():
+    """The reader renders the interstitial happily and returns 200, so the
+    challenge page arrives looking exactly like a successful fetch."""
+    url = "https://in.indeed.com/viewjob?jk=abc456"
+    respx.get(url).mock(return_value=httpx.Response(401))
+    respx.get(f"{READER}{url}").mock(
+        return_value=httpx.Response(
+            200,
+            text=reader_body("Just a moment... Enable JavaScript and cookies to continue. " * 30),
+        )
+    )
+    assert fetch_jd(url).blocked
