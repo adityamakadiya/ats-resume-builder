@@ -9,15 +9,18 @@ import {
   listRuns,
   listThemes,
   patchRun,
+  scoreDoc,
   parseResume,
   renderPdf,
   tailor,
+  type AtsReport,
   type ParseResponse,
   type RunSummary,
   type TailorResponse,
 } from "@/lib/backend";
 import { ResumeEditor, useResumeEditor } from "./_components/editor";
 import { Rail } from "./_components/rail";
+import { Suggestions } from "./_components/suggestions";
 import { STEPS, Stepper, useElapsed, type StepState } from "./_components/steps";
 
 type Phase = "intake" | "working" | "editing";
@@ -62,6 +65,8 @@ export default function Home() {
   const [runId, setRunId] = useState<number | null>(null);
   const [status, setStatus] = useState("draft");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  // The score is computed rather than generated, so it can follow every edit.
+  const [liveReport, setLiveReport] = useState<AtsReport | null>(null);
 
   // The editor owns the document from the moment the rewrite lands, and the
   // renderer reads from it, so the PDF is always exactly what is on screen.
@@ -125,6 +130,7 @@ export default function Home() {
       setRunId(tailored.run_id);
       setStatus("draft");
       resetEditor(tailored.tailored);
+      setLiveReport(tailored.report);
       mark("tailor", "done");
       // Rendering now happens on demand, against whatever you have edited.
       mark("render", "done");
@@ -158,6 +164,16 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [editor.doc, editor.editedKeys.size, runId, phase]);
 
+  useEffect(() => {
+    if (phase !== "editing" || !result || !parsed || editor.editedKeys.size === 0) return;
+    const timer = setTimeout(() => {
+      scoreDoc(editor.doc, parsed.facts, result.job)
+        .then(setLiveReport)
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [editor.doc, editor.editedKeys.size, phase, result, parsed]);
+
   async function openRun(id: number) {
     setError(null);
     try {
@@ -178,6 +194,7 @@ export default function Home() {
         repair_attempted: detail.repair_attempted,
       });
       resetEditor(detail.tailored);
+      setLiveReport(detail.report);
       setRunId(detail.id);
       setStatus(detail.status);
       setSaveState("saved");
@@ -298,9 +315,14 @@ export default function Home() {
               contactLine={contactLine}
             />
           </div>
-          <div className="rise lg:sticky lg:top-16 lg:self-start">
+          <div className="rise space-y-4 lg:sticky lg:top-16 lg:self-start">
+            <Suggestions
+              report={liveReport ?? result.report}
+              doc={editor.doc}
+              onAddSkill={editor.addSkill}
+            />
             <Rail
-              report={result.report}
+              report={liveReport ?? result.report}
               truth={result.truth}
               gaps={result.gaps}
               strategy={result.strategy}

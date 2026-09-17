@@ -301,6 +301,21 @@ export async function tailor(
   );
 }
 
+/** Free and instant: the score is computed, not asked of a model. */
+export async function scoreDoc(
+  tailored: TailoredResume,
+  facts: ResumeFacts,
+  job: JobSpec,
+): Promise<AtsReport> {
+  return unwrap(
+    await fetch(`${BASE}/api/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tailored, facts, job }),
+    }),
+  );
+}
+
 export async function listRuns(): Promise<{ runs: RunSummary[]; statuses: string[] }> {
   return unwrap(await fetch(`${BASE}/api/runs`, { cache: "no-store" }));
 }

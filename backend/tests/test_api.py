@@ -280,3 +280,50 @@ def test_a_run_can_be_deleted(client, facts, tailored, temp_db):
     run_id = temp_db.save_run(**_run_kwargs(facts, tailored))
     assert client.delete(f"/api/runs/{run_id}").status_code == 200
     assert client.get(f"/api/runs/{run_id}").status_code == 404
+
+
+def test_score_endpoint_is_free_and_deterministic(client, tailored, facts):
+    """No model call, so the editor can re-score on every keystroke."""
+    payload = {
+        "tailored": tailored.model_dump(mode="json"),
+        "facts": facts.model_dump(mode="json"),
+        "job": {
+            "company": "Acme",
+            "title": "Backend Engineer",
+            "keywords": [
+                {"term": "Node.js", "variants": ["NodeJS"], "weight": 5},
+                {"term": "Kubernetes", "variants": [], "weight": 3},
+            ],
+        },
+    }
+    first = client.post("/api/score", json=payload)
+    assert first.status_code == 200
+    second = client.post("/api/score", json=payload)
+    assert first.json() == second.json()
+    assert "Kubernetes" in first.json()["missing_keywords"]
+
+
+def test_adding_a_skill_moves_the_score(client, tailored, facts):
+    """What makes one-click adding worth building: the number responds."""
+    job = {
+        "company": "Acme",
+        "title": "Backend Engineer",
+        "keywords": [{"term": "Kubernetes", "variants": [], "weight": 5}],
+    }
+    before = client.post(
+        "/api/score",
+        json={
+            "tailored": tailored.model_dump(mode="json"),
+            "facts": facts.model_dump(mode="json"),
+            "job": job,
+        },
+    ).json()
+
+    with_skill = tailored.model_dump(mode="json")
+    with_skill["skills"][0]["items"].append("Kubernetes")
+    after = client.post(
+        "/api/score",
+        json={"tailored": with_skill, "facts": facts.model_dump(mode="json"), "job": job},
+    ).json()
+
+    assert after["sub_scores"]["keyword_match"] > before["sub_scores"]["keyword_match"]

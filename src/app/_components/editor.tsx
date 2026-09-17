@@ -134,7 +134,39 @@ export function useResumeEditor(initial: TailoredResume) {
     setEditedKeys((prev) => new Set(prev).add(key));
   }, []);
 
-  return { doc, editedKeys, patch, reset };
+  /**
+   * Put a term into the skill group it belongs in.
+   *
+   * A suggestion has to land somewhere sensible or the user has to go tidy up
+   * after every click. The posting's own category names rarely match the
+   * resume's group names exactly, so this looks for a shared word, then falls
+   * back to the first group, then creates one.
+   */
+  const addSkill = useCallback(
+    (term: string, asserted: boolean) => {
+      const key = asserted ? `asserted:${term}` : `recovered:${term}`;
+      patch(key, (draft) => {
+        const clean = term.trim();
+        if (!clean) return;
+        const already = draft.skills.some((g) =>
+          g.items.some((i) => i.toLowerCase() === clean.toLowerCase()),
+        );
+        if (already) return;
+
+        const words = clean.toLowerCase().split(/[\s/]+/);
+        const target =
+          draft.skills.find((g) =>
+            words.some((w) => g.category.toLowerCase().includes(w) && w.length > 3),
+          ) ?? draft.skills[0];
+
+        if (target) target.items.push(clean);
+        else draft.skills.push({ category: "Skills", items: [clean], source_ids: [] });
+      });
+    },
+    [patch],
+  );
+
+  return { doc, editedKeys, patch, reset, addSkill };
 }
 
 /* ---------------------------------------------------------------- editor -- */

@@ -247,6 +247,7 @@ def main() -> int:
         page.route(f"{API}/api/resume/parse", stub(PARSE))
         page.route(f"{API}/api/jd/fetch", stub(JD))
         page.route(f"{API}/api/tailor", stub(TAILOR))
+        page.route(f"{API}/api/score", stub(TAILOR["report"]))
         page.route(
             f"{API}/api/render",
             lambda route: route.fulfill(
@@ -340,6 +341,20 @@ def main() -> int:
 
         check("template picker is offered", page.get_by_label("PDF template").count() == 1)
         check("application status is offered", page.get_by_label("Application status").count() == 1)
+
+        # One click on a recoverable term must land it in the document.
+        docker = page.get_by_role("button", name="+ Docker")
+        check("a recoverable term is suggested", docker.count() == 1)
+        docker.click()
+        page.wait_for_timeout(250)
+        check("clicking it adds the skill", page.get_by_label("Remove Docker").count() == 1)
+        check("the suggestion disappears once added",
+              page.get_by_role("button", name="+ Docker").count() == 0)
+
+        kubernetes = page.get_by_role("button", name="+ Kubernetes")
+        check("an unclaimed term is shown but framed as a claim", kubernetes.count() == 1)
+        check("and is labelled as not verified",
+              page.get_by_text("your claim, not a verified one").count() == 1)
         check(
             "the chosen template reaches the render",
             sent.get("theme") == "engineeringresumes",

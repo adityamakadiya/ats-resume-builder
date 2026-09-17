@@ -82,25 +82,9 @@ export function Rail({
         </div>
       </div>
 
-      {report.recoverable_keywords.length > 0 && (
-        <div className="border-l-2 border-caution bg-caution-soft px-2.5 py-2">
-          <p className="font-mono text-[0.625rem] uppercase tracking-wider text-caution">
-            Already yours, currently absent
-          </p>
-          <p className="mt-1 text-[0.8125rem] text-caution">
-            {report.recoverable_keywords.join(", ")}
-          </p>
-        </div>
-      )}
-
-      {report.missing_keywords.length > 0 && (
-        <div>
-          <p className="label mb-1.5">Cannot claim</p>
-          <p className="text-[0.8125rem] leading-snug text-ink-muted">
-            {report.missing_keywords.slice(0, 12).join(", ")}
-          </p>
-        </div>
-      )}
+      {/* The recoverable and missing lists used to sit here as text. They are
+          now the Suggestions panel above, where they can be clicked, and
+          repeating them read-only was two lines saying the same thing. */}
 
       <div className="border-t border-rule pt-3">
         {truth.passed ? (

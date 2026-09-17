@@ -358,6 +358,25 @@ async def tailor(request: TailorRequest) -> TailorResponse:
     )
 
 
+class ScoreRequest(BaseModel):
+    tailored: TailoredResume
+    facts: ResumeFacts
+    job: JobSpec
+
+
+@app.post("/api/score", response_model=AtsReport)
+async def score(request: ScoreRequest) -> AtsReport:
+    """Re-score an edited document.
+
+    Free and instant: the score is computed, not asked of a model, so the editor
+    can call it on every change and show the number moving as you work. That is
+    the whole payoff of having refused to let the model invent the number.
+    """
+    from .pipeline.scoring import compute_ats_report
+
+    return compute_ats_report(request.job, request.facts, request.tailored)
+
+
 class RunPatch(BaseModel):
     tailored: TailoredResume | None = None
     status: str | None = None
