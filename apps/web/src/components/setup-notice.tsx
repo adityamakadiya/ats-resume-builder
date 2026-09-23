@@ -94,12 +94,17 @@ export function SetupNotice({
         <li>
           <p className="text-ink">
             <span className="font-mono text-xs text-ink-faint">4.</span> Apply
-            the schema with{" "}
+            the schema.{" "}
+            <code className="rounded-xs bg-paper-sunk px-1.5 py-0.5 font-mono text-[0.8125rem]">
+              supabase db push
+            </code>{" "}
+            for a hosted project, or{" "}
             <code className="rounded-xs bg-paper-sunk px-1.5 py-0.5 font-mono text-[0.8125rem]">
               supabase db reset
-            </code>
-            , then restart the dev server. Next inlines public variables at
-            build time, so a reload alone will not pick them up.
+            </code>{" "}
+            against a local one. Reset drops the database, so the two are not
+            interchangeable. Then restart the dev server: Next inlines public
+            variables at build time, so a reload alone will not pick them up.
           </p>
         </li>
       </ol>

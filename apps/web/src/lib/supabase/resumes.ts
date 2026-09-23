@@ -82,7 +82,9 @@ export async function listResumes(): Promise<ResumesResult> {
       return {
         state: "failed",
         reason: "The database is reachable but the tables are not there yet.",
-        remedy: "Run supabase db reset from the repository root to apply the migrations.",
+        remedy:
+          "Apply the migrations from the repository root: `supabase db push` " +
+          "for a hosted project, or `supabase db reset` against a local one.",
       };
     }
     return {

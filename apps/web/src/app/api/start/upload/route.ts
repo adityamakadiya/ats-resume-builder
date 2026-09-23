@@ -94,7 +94,12 @@ export async function POST(request: Request) {
     if (message.includes("bucket") && message.includes("not found")) {
       return refuse(
         "The storage bucket does not exist yet.",
-        "Run supabase db reset so 0006_storage.sql creates the resumes bucket.",
+        // `db reset` is the LOCAL command and it drops the database. Naming
+        // it to someone pointed at a hosted project is at best wrong and at
+        // worst destructive, so say which command belongs to which setup.
+        "Apply the migrations first: `supabase db push` for a hosted project, " +
+          "or `supabase db reset` against a local one. 0006_storage.sql is what " +
+          "creates the resumes bucket.",
         500
       );
     }

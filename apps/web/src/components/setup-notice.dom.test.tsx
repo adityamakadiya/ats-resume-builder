@@ -69,6 +69,7 @@ describe("SetupNotice", () => {
   it("says where the variables go and what to run", () => {
     render(<SetupNotice />);
     expect(screen.getByText(".env.local")).toBeTruthy();
+    expect(screen.getByText("supabase db push")).toBeTruthy();
     expect(screen.getByText("supabase db reset")).toBeTruthy();
   });
 
