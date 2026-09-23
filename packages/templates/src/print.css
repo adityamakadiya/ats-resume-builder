@@ -346,30 +346,40 @@
   display: contents;
 }
 
-.rz-skills > dt {
+.rz-skills dt {
   font-weight: 650;
   color: var(--ink);
   break-inside: avoid;
 }
 
-.rz-skills > dd {
+.rz-skills dd {
   color: var(--ink-soft);
 }
 
-/* Stacked variant for a narrow column. */
+/* Each category is wrapped in a .rz-skill-row so the pair stays together
+   across a page break. The wrapper is display:contents, so the grid still
+   lays dt and dd out as two columns, and that is exactly what made the
+   following bug survive review: every rule here was written as
+   `.rz-skills > dt`, the wrapper broke the child combinator, and NONE of
+   them ever matched. Standard still looked right because the grid alignment
+   comes from the dl, not from these rules, so the only visible symptom was a
+   category label rendering at the same weight as its values, which reads as
+   a design choice rather than a bug. Descendant selectors throughout.
+
+   Stacked variant for a narrow column. */
 .rz-skills--stacked {
   display: block;
 }
 
-.rz-skills--stacked > dt {
+.rz-skills--stacked dt {
   margin-top: var(--gap-head);
 }
 
-.rz-skills--stacked > dt:first-child {
+.rz-skills--stacked .rz-skill-row:first-child dt {
   margin-top: 0;
 }
 
-.rz-skills--stacked > dd {
+.rz-skills--stacked dd {
   font-size: var(--t-small);
   line-height: 1.4;
 }
@@ -523,7 +533,7 @@
   white-space: normal;
 }
 
-.rz--modern .rz-aside .rz-skills--stacked > dt {
+.rz--modern .rz-aside .rz-skills--stacked dt {
   font-size: var(--t-small);
   font-weight: 700;
   letter-spacing: 0.02em;

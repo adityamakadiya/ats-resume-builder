@@ -179,3 +179,66 @@ def test_links_are_clickable_not_merely_blue(rendered):
 
     assert links, "no clickable links survived the print"
     assert any(link.get("uri", "").startswith("http") for link in links)
+
+
+# --------------------------------------------------------------------------- #
+# Computed style                                                               #
+# --------------------------------------------------------------------------- #
+#
+# The tests above read the text layer. This one reads the cascade, because a
+# rule can fail to match without changing a single character of output.
+#
+# It exists because of a specific bug. Every skills rule was written as
+# `.rz-skills > dt`, and the markup wraps each pair in a div so the pair stays
+# together across a page break. The child combinator therefore matched nothing.
+# The wrapper is `display: contents`, so the two-column grid still laid out
+# correctly and the only visible symptom was a category label rendering at the
+# same weight as its values, which reads as a design choice rather than a fault.
+# jsdom cannot see it, a text-layer test cannot see it, and a person reviewing
+# the stylesheet reads the selector they meant to write.
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("template", TEMPLATES)
+def test_a_skill_category_is_distinguishable_from_its_items(template):
+    """The label must not render identically to the values beside it."""
+    from playwright.sync_api import sync_playwright
+
+    path = HTML_DIR / f"{template}--rich.html"
+    if not path.exists():
+        pytest.skip("rendered template HTML is missing")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(path.absolute().as_uri(), wait_until="load")
+            measured = page.evaluate(
+                """() => {
+                    const dl = document.querySelector('.rz-skills');
+                    if (!dl) return null;
+                    const dt = dl.querySelector('dt');
+                    const dd = dl.querySelector('dd');
+                    if (!dt || !dd) return null;
+                    const read = (el) => {
+                        const s = getComputedStyle(el);
+                        return { weight: Number(s.fontWeight), size: s.fontSize, colour: s.color };
+                    };
+                    return { dt: read(dt), dd: read(dd) };
+                }"""
+            )
+        finally:
+            browser.close()
+
+    assert measured is not None, f"{template} has no skills list to check"
+
+    label, value = measured["dt"], measured["dd"]
+    distinguishable = (
+        label["weight"] > value["weight"]
+        or label["size"] != value["size"]
+        or label["colour"] != value["colour"]
+    )
+    assert distinguishable, (
+        f"{template}: a skill category renders identically to its items "
+        f"({label}). A selector is not matching."
+    )
