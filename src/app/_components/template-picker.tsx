@@ -29,7 +29,15 @@ export function TemplatePicker({
   return (
     <div className="border-t border-rule pt-3">
       <p className="label mb-2">Template</p>
-      <div className="grid grid-cols-3 gap-1.5">
+      {/* Two across, not three. At a third of the rail a thumbnail is a grey
+          rectangle: you can tell it is a resume and nothing else, which makes
+          it decoration rather than a control. Two across is the smallest size
+          at which the section headings, the rules and the density are legible,
+          which is the whole reason for showing a picture. Nine at that size
+          make the rail taller than the screen; the rail itself scrolls, rather
+          than this grid scrolling inside it, because a scroller nested in a
+          sticky column cuts a row in half and reads as a clipping bug. */}
+      <div className="grid grid-cols-2 gap-2">
         {keys.map((key) => {
           const selected = key === value;
           // The label carries a name and a description joined by a dash. The
@@ -61,7 +69,7 @@ export function TemplatePicker({
                 />
               </span>
               <span
-                className={`block truncate px-1 py-0.5 font-mono text-[0.5625rem] uppercase tracking-wider ${
+                className={`block truncate px-1.5 py-1 font-mono text-[0.625rem] uppercase tracking-wider ${
                   selected ? "bg-ink text-paper-raised" : "text-ink-faint"
                 }`}
               >

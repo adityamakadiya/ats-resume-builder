@@ -307,7 +307,7 @@ export default function Home() {
           <p className="mx-auto max-w-6xl px-5 pt-3 text-[0.8125rem] text-stamp">{error.message}</p>
         )}
 
-        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-6 lg:grid-cols-[1fr_15rem]">
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-6 lg:grid-cols-[1fr_18rem]">
           <div className="rise min-w-0">
             <ResumeEditor
               doc={editor.doc}
@@ -317,7 +317,7 @@ export default function Home() {
               contactLine={contactLine}
             />
           </div>
-          <div className="rise space-y-4 lg:sticky lg:top-16 lg:self-start">
+          <div className="rise space-y-4 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
             <Rail
               report={liveReport ?? result.report}
               truth={result.truth}
