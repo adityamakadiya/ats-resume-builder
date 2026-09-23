@@ -61,14 +61,19 @@ function Fold({ title, count, children }: { title: string; count?: number; child
 function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     /*
-      `min-h-0` only from lg up. Below that the three panels are stacked rows
-      in a scrolling column and a zero minimum lets a row collapse under its
-      own content, which clipped the score card halfway through the numeral
-      on a phone. Above lg they are side by side inside a fixed-height shell
-      and each one has to be allowed to shrink so it can scroll internally.
+      Neither `min-h-0` nor a clip below lg, and both are the same bug.
+
+      Stacked on a phone these are rows in a scrolling column and each one
+      has to be as tall as its content. An element whose overflow is not
+      visible has an automatic minimum size of zero, so `overflow-hidden`
+      alone let grid share the 500 pixels of viewport equally between the
+      rows and cut the score card off halfway through the numeral. Above lg
+      they sit side by side in a shell of fixed height, where each one does
+      have to be allowed to shrink and scroll inside itself, and the caller
+      says which way with `lg:overflow-*`.
     */
     <div
-      className={`flex flex-col overflow-hidden rounded-xl border border-rule bg-paper-raised lg:min-h-0 ${className}`}
+      className={`flex flex-col rounded-xl border border-rule bg-paper-raised lg:min-h-0 ${className}`}
     >
       {children}
     </div>
@@ -263,12 +268,12 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         </Panel>
 
         {/* centre */}
-        <Panel className="min-h-[26rem]">
+        <Panel className="min-h-[26rem] lg:overflow-hidden">
           <ChatPanel prefill={prefill} />
         </Panel>
 
         {/* right */}
-        <Panel className="hidden xl:flex">
+        <Panel className="hidden xl:flex xl:overflow-hidden">
           <PreviewPane doc={doc} templateId={templateId} zoom={zoom} onZoom={store.setZoom} />
         </Panel>
       </div>

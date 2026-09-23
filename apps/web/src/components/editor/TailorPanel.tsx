@@ -35,8 +35,14 @@ import { useEditorStore } from "@/lib/store/editor";
 
 /* ----------------------------------------------------------------- state -- */
 
+/**
+ * `stopped` is a step that was running when the run ended early, either
+ * because the posting could not be fetched or because the user cancelled.
+ * It is not `done` and it is not `waiting`: it started, it did not finish,
+ * and the clock beside it is frozen at what it cost.
+ */
 type StepRecord = {
-  state: "waiting" | "running" | "done";
+  state: "waiting" | "running" | "done" | "stopped";
   startedAt?: number;
   endedAt?: number;
 };
@@ -77,10 +83,11 @@ function StepRow({
 }) {
   const running = record.state === "running";
   const done = record.state === "done";
+  const stopped = record.state === "stopped";
   const elapsed =
     record.startedAt === undefined
       ? null
-      : (record.endedAt ?? now) - record.startedAt;
+      : Math.max(0, (record.endedAt ?? now) - record.startedAt);
 
   return (
     <li className="flex items-start gap-3 py-2">
@@ -92,17 +99,19 @@ function StepRow({
             ? "border-traced bg-traced text-paper-raised"
             : running
               ? "border-stamp bg-stamp-soft text-stamp"
-              : "border-rule-strong text-transparent",
+              : stopped
+                ? "border-caution text-caution"
+                : "border-rule-strong text-transparent",
         ].join(" ")}
       >
-        {done ? "✓" : running ? "●" : ""}
+        {done ? "\u2713" : running ? "\u25CF" : stopped ? "\u00B7" : ""}
       </span>
 
       <span className="min-w-0 flex-1">
         <span
           className={[
             "block text-[0.8125rem] leading-snug",
-            running ? "text-ink" : done ? "text-ink-muted" : "text-ink-faint",
+            running ? "text-ink" : done || stopped ? "text-ink-muted" : "text-ink-faint",
           ].join(" ")}
         >
           {STEP_LABEL[step]}
@@ -163,12 +172,27 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
   /* An abandoned run keeps spending money. Abort on unmount, always. */
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  /** Freeze whatever was in flight, rather than leaving a spinner running. */
+  const stopSteps = useCallback(() => {
+    setSteps((previous) => {
+      const at = performance.now();
+      const next = { ...previous };
+      for (const step of TAILOR_STEPS) {
+        const record = next[step];
+        if (record.state !== "running") continue;
+        next[step] = { state: "stopped", startedAt: record.startedAt, endedAt: at };
+      }
+      return next;
+    });
+  }, []);
+
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    stopSteps();
     setPhase("editing");
     setRepairing(false);
-  }, []);
+  }, [stopSteps]);
 
   const close = useCallback(() => {
     if (phase === "running") cancel();
@@ -177,14 +201,16 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
 
   const ready = mode === "paste" ? jdText.trim().length > 0 : jdUrl.trim().length > 0;
 
+  const started = TAILOR_STEPS.some((step) => steps[step].state !== "waiting");
+
   const totalElapsed = useMemo(() => {
-    const started = Object.values(steps)
-      .map((record) => record.startedAt)
-      .filter((value): value is number => value !== undefined);
-    if (started.length === 0) return null;
-    const first = Math.min(...started);
-    const ends = Object.values(steps).map((record) => record.endedAt ?? now);
-    return Math.max(...ends) - first;
+    const touched = Object.values(steps).filter(
+      (record) => record.startedAt !== undefined,
+    );
+    if (touched.length === 0) return null;
+    const first = Math.min(...touched.map((record) => record.startedAt as number));
+    const last = Math.max(...touched.map((record) => record.endedAt ?? now));
+    return Math.max(0, last - first);
   }, [steps, now]);
 
   function markStep(step: TailorStep, state: "start" | "done") {
@@ -295,7 +321,10 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
     } finally {
       abortRef.current = null;
       setRepairing(false);
-      if (!finished) setPhase((current) => (current === "running" ? "editing" : current));
+      if (!finished) {
+        stopSteps();
+        setPhase((current) => (current === "running" ? "editing" : current));
+      }
     }
   }
 
@@ -387,8 +416,17 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
               <span className="font-medium text-caution">{blocked.message}</span>{" "}
               {blocked.hint}
               <span className="mt-1.5 block text-ink-muted">
-                Your link is still in the box above. Paste the posting text here instead
-                and the run will pick up from there.
+                Nothing you typed was lost. Paste the posting text below and run it
+                again.
+                {jdUrl.trim() && (
+                  <>
+                    {" "}
+                    Your link is kept:{" "}
+                    <span className="font-mono text-[0.75rem] break-all text-ink">
+                      {jdUrl.trim()}
+                    </span>
+                  </>
+                )}
               </span>
             </p>
           )}
@@ -437,13 +475,21 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
           </div>
 
           {/* ------------------------------------------------- progress -- */}
-          {(phase === "running" || phase === "done") && (
+          {/*
+            Kept on screen after a run that stopped early too. A posting that
+            came back behind a login wall still parsed the resume first, and
+            throwing that away would make the retry look like it starts from
+            nothing.
+          */}
+          {(phase === "running" || phase === "done" || started) && (
             <section
               aria-label="Progress"
               className="mt-5 rounded-xl border border-rule bg-paper-sunk/60 px-4 py-3"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="label">{phase === "done" ? "What happened" : "Working"}</p>
+                <p className="label">
+                  {phase === "running" ? "Working" : phase === "done" ? "What happened" : "Stopped here"}
+                </p>
                 <span className="font-mono text-[0.6875rem] tabular-nums text-ink-faint">
                   {totalElapsed === null ? "" : seconds(totalElapsed)}
                 </span>
