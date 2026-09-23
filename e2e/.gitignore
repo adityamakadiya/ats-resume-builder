@@ -1,0 +1,5 @@
+# Written by the setup project, and it is a live session token.
+.auth/
+# Playwright output. Traces and screenshots are kept for failures only.
+test-results/
+playwright-report/

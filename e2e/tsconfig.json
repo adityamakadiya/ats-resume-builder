@@ -1,0 +1,32 @@
+{
+  /*
+    The specs live here, the packages live in apps/web.
+
+    There is no node_modules at the repository root (npm hoists into
+    apps/web), so a bare `import from "@playwright/test"` in this directory
+    resolves against nothing. Playwright honours tsconfig `paths` when it
+    transforms a test file, so the two packages the suite needs are pointed
+    at explicitly rather than by adding a node_modules symlink that would
+    have to be recreated after every install.
+  */
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@playwright/test": ["../apps/web/node_modules/@playwright/test"],
+      "@axe-core/playwright": ["../apps/web/node_modules/@axe-core/playwright"],
+      "playwright-core": ["../apps/web/node_modules/playwright-core"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["unconfigured-app", "node_modules", "test-results", "playwright-report"]
+}

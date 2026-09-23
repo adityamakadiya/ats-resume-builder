@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "e2e": "playwright test --config=playwright.config.ts",
+    "e2e:tier1": "playwright test --config=playwright.config.ts --project=tier1 --project=tier1-unconfigured",
+    "e2e:tier2": "playwright test --config=playwright.config.ts --project=tier2",
+    "e2e:tier3": "playwright test --config=playwright.config.ts --project=tier3",
+    "e2e:ci": "playwright test --config=playwright.config.ts --project=tier1 --project=tier1-unconfigured --project=tier3",
+    "e2e:report": "playwright show-report ../../e2e/playwright-report",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@ats/core": "*",
@@ -28,6 +35,8 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.2",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

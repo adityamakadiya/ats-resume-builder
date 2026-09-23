@@ -4,19 +4,27 @@
 
 /*
   ===========================================================================
-  Editorial forensic instrument.
+  A light, calm product surface.
 
-  The product's whole claim is that it traces rather than embellishes, so the
-  interface is set like a laboratory report: warm paper, ink type, hairline
-  rules instead of floating cards, and every number in mono so it reads as
-  measured rather than asserted. The accent is a stamp red, the mark a
-  document gets when someone has actually checked it.
+  The earlier theme was a warm editorial one that followed the operating
+  system, which meant most people opened a resume tool at night and were
+  handed a dark document editor. A resume is printed on white paper and
+  judged on white paper, so the thing you are editing should sit on white
+  and the chrome around it should get out of the way.
 
-  Light is the default and the canonical theme. Dark is not an inversion of
-  it: paper becomes the archive room rather than a glowing sheet, the grain
-  stays, and the stamp lifts in chroma so it survives on a dark ground.
-  Both are driven by prefers-color-scheme. A `.dark` / `.light` class on
-  <html> overrides the query for anyone who wires up a manual switch later.
+  So: a cool near-white page, true white surfaces for anything that holds
+  content, one confident blue for the actions that commit, and a restrained
+  set of semantic colours that each mean exactly one thing.
+
+    blue     the action you are here to take
+    green    traced, already true, free to use
+    amber    your assertion, defensible but yours
+    red      refused, and why
+
+  DARK NO LONGER FOLLOWS THE SYSTEM. It is available behind an explicit
+  `.dark` class for anyone who wires up a switch, but a machine set to dark
+  gets the light theme, because that is the surface this product is designed
+  on and the one that matches the page it produces.
 
   shadcn/ui ships its own semantic token names. Rather than run two palettes
   side by side, every shadcn token below is an alias onto a paper token, so a
@@ -30,12 +38,12 @@
   media query. This variant fires for both, so an explicit `.light` class can
   still pin the light theme on a dark-set machine.
 */
+/*
+  Class-driven only. shadcn's components carry `dark:` utilities and this is
+  what decides when they fire. It deliberately does NOT read
+  prefers-color-scheme: see the note above.
+*/
 @custom-variant dark {
-  @media (prefers-color-scheme: dark) {
-    &:where(:root:not(.light), :root:not(.light) *) {
-      @slot;
-    }
-  }
   &:where(.dark, .dark *) {
     @slot;
   }
@@ -46,29 +54,48 @@
 :root {
   color-scheme: light;
 
-  --paper: #f7f4ee;
-  --paper-raised: #fffdf9;
-  --paper-sunk: #efeae1;
-  --ink: #17140f;
-  --ink-muted: #5d564a;
-  --ink-faint: #8c8274;
-  --rule: #ddd6c9;
-  --rule-strong: #c4bbaa;
+  /* Surfaces. The page is faintly cool so that true-white content sits
+     forward of it without needing a shadow to say so. */
+  --paper: #f6f8fb;
+  --paper-raised: #ffffff;
+  --paper-sunk: #eef2f7;
 
-  --stamp: #b03a1f;
-  --stamp-soft: #f3e2dc;
-  --traced: #2f6b46;
-  --traced-soft: #e2ece5;
+  /* Type. Near-black rather than black: #0f172a at full size reads as
+     confident, pure black reads as harsh against white. */
+  --ink: #0f172a;
+  --ink-muted: #55627a;
+  --ink-faint: #8a94a6;
+
+  --rule: #e3e8ef;
+  --rule-strong: #cbd3e0;
+
+  /* The one action colour. Everything that commits is this blue and nothing
+     else is, so a button that looks like this can be trusted to do
+     something. */
+  --stamp: #2563eb;
+  --stamp-soft: #e8eefe;
+  --stamp-strong: #1d4ed8;
+
+  /* Already true, and free to use. */
+  --traced: #047857;
+  --traced-soft: #e3f4ee;
   /* Legacy alias. The honest word is 'traced', but the prototype in
      src/app/_components still styles with these and the editor agent is
      mining that file. Same value, one name to migrate to. */
   --verified: var(--traced);
   --verified-soft: var(--traced-soft);
-  --caution: #8a6117;
-  --caution-soft: #f5ecd8;
+  /* Your assertion. Defensible, but yours, and counted as a hand edit. */
+  --caution: #a55a09;
+  --caution-soft: #fdf1df;
 
-  --grain: var(--rule);
-  --grain-opacity: 1;
+  /* Refused, and the reason shown. */
+  --refused: #b42318;
+  --refused-soft: #fdeceb;
+
+  /* The paper grain belonged to the editorial theme. A product surface is
+     flat; the texture was noise on a screen people read for an hour. */
+  --grain: transparent;
+  --grain-opacity: 0;
 
   /* shadcn semantic aliases */
   --background: var(--paper);
@@ -116,9 +143,12 @@
   OLED. The stamp gains lightness and loses a little chroma so it stays a
   stamp and does not become a neon.
 */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    color-scheme: dark;
+/*
+  Opt in only. `<html class="dark">` selects it; the operating system does
+  not. Kept rather than deleted so a future toggle has somewhere to point.
+*/
+.dark {
+  color-scheme: dark;
 
     --paper: #131210;
     --paper-raised: #1c1a17;
@@ -147,7 +177,6 @@
     --sidebar-primary-foreground: var(--paper-sunk);
     --sidebar-accent: var(--paper-raised);
   }
-}
 
 .dark {
   color-scheme: dark;
@@ -233,12 +262,17 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 6px;
+  /* Soft, not sharp. The 2px corners belonged to a document; a product
+     surface reads as friendlier and less clinical at 8 to 12. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
-  --font-display: var(--font-instrument-serif);
+  /* Headings are the sans at weight, not a serif. A display serif framed
+     this as a printed report; the product around the document should be
+     quieter than the document. */
+  --font-display: var(--font-plex-sans);
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
 }

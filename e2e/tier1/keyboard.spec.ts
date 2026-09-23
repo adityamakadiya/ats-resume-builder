@@ -26,36 +26,62 @@ async function focused(page: import("@playwright/test").Page) {
   });
 }
 
-test("tab order runs Google, then email, then submit", async ({ page }) => {
-  await page.goto("/login");
-
-  // The email input carries autoFocus, so a tab walk has to start from a
-  // known place rather than from wherever the page left it.
+/**
+ * Walk one full tab cycle, starting from the top of the document.
+ *
+ * Blurring and pressing Tab does not start over: Chromium resumes from where
+ * the last focus was, and this page autofocuses the email field, so a naive
+ * walk records the submit button first and then everything else. So the walk
+ * runs until it reaches the skip link, which is the document's first
+ * tabbable, and only then starts recording.
+ */
+async function tabCycle(page: import("@playwright/test").Page, steps = 8) {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
-  const order: string[] = [];
   for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    if (/skip to content/i.test(await focused(page))) break;
+  }
+
+  const order = ["a:Skip to content"];
+  for (let i = 0; i < steps; i++) {
     await page.keyboard.press("Tab");
     order.push(await focused(page));
   }
+  return order;
+}
 
+test("tab order runs skip link, Google, email, submit", async ({ page }) => {
+  await page.goto("/login");
+
+  const order = await tabCycle(page);
+  const walk = order.join("\n");
   const indexOf = (pattern: RegExp) => order.findIndex((entry) => pattern.test(entry));
 
+  const skip = indexOf(/skip to content/i);
   const google = indexOf(/continue with google/i);
   const email = indexOf(/^email:/i);
   const submit = indexOf(/email me a sign in link/i);
 
-  expect(google, `Google button never took focus. Walk was:\n${order.join("\n")}`).toBeGreaterThanOrEqual(0);
-  expect(email, `email field never took focus. Walk was:\n${order.join("\n")}`).toBeGreaterThanOrEqual(0);
-  expect(submit, `submit never took focus. Walk was:\n${order.join("\n")}`).toBeGreaterThanOrEqual(0);
+  expect(skip, `no skip link. Walk was:\n${walk}`).toBe(0);
+  expect(google, `Google button never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
+  expect(email, `email field never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
+  expect(submit, `submit never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
 
-  expect(google).toBeLessThan(email);
-  expect(email).toBeLessThan(submit);
+  expect(skip, `Walk was:\n${walk}`).toBeLessThan(google);
+  expect(google, `Walk was:\n${walk}`).toBeLessThan(email);
+  expect(email, `Walk was:\n${walk}`).toBeLessThan(submit);
 });
 
 test("every control in the form draws a visible focus ring", async ({ page }) => {
   await page.goto("/login");
+
+  // Same reset as the tab order test: start from the top of the document.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    if (/skip to content/i.test(await focused(page))) break;
+  }
 
   const targets = [
     { name: "Google button", pattern: /continue with google/i },
