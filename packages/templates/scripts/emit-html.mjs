@@ -1,0 +1,114 @@
+/**
+ * Render every template against every fixture to a self-contained HTML file.
+ *
+ * These files are the seam between the two halves of the product. A template
+ * is React and the PDF is printed by Chromium in a Python service, so nothing
+ * in either language's test suite can tell you whether the thing a candidate
+ * downloads carries a readable text layer in the right order. That question
+ * only has an answer once the real component has been rendered and the real
+ * browser has printed it.
+ *
+ * So: this emits, and backend/tests/test_template_pdf.py prints and inspects.
+ * Committing the output keeps the Python suite offline and fast; --check keeps
+ * it honest, by failing when a template has changed and the frozen HTML has
+ * not, which is the moment the PDF tests quietly start proving nothing.
+ *
+ *   node scripts/emit-html.mjs           # write
+ *   node scripts/emit-html.mjs --check   # fail if stale
+ *
+ * Self-contained matters literally: the renderer has no network, so the CSS is
+ * inlined here rather than linked. A <link> would silently fall back to
+ * Times New Roman and the diff would look fine.
+ */
+
+import { createRequire } from "node:module";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { TEMPLATES } from "../src/registry.ts";
+import { FIXTURES } from "../src/fixtures.ts";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const OUT = resolve(HERE, "..", "test", "fixtures", "html");
+const CSS = readFileSync(resolve(HERE, "..", "src", "print.css"), "utf8");
+
+/** Rung 0 unless the caller says otherwise; the ladder is exercised separately. */
+const DENSITY = 0;
+
+function page(title, body) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<style>
+${CSS}
+</style>
+</head>
+<body data-density="${DENSITY}">
+${body}
+</body>
+</html>
+`;
+}
+
+function build() {
+  const files = new Map();
+
+  for (const [templateId, meta] of Object.entries(TEMPLATES)) {
+    for (const [fixtureName, doc] of Object.entries(FIXTURES)) {
+      const element = React.createElement(meta.component, { doc, density: DENSITY });
+      const body = renderToStaticMarkup(element);
+      files.set(`${templateId}--${fixtureName}.html`, page(`${meta.name} / ${fixtureName}`, body));
+    }
+  }
+
+  return files;
+}
+
+function main() {
+  const check = process.argv.includes("--check");
+  const files = build();
+
+  if (check) {
+    let stale = [];
+    let existing;
+    try {
+      existing = new Set(readdirSync(OUT).filter((f) => f.endsWith(".html")));
+    } catch {
+      console.error(`Rendered HTML missing: ${OUT}`);
+      process.exit(1);
+    }
+
+    for (const [name, html] of files) {
+      if (!existing.delete(name)) {
+        stale.push(`${name} (missing)`);
+        continue;
+      }
+      if (readFileSync(join(OUT, name), "utf8") !== html) stale.push(`${name} (changed)`);
+    }
+    for (const orphan of existing) stale.push(`${orphan} (no longer produced)`);
+
+    if (stale.length) {
+      console.error(
+        "Rendered HTML is stale, so the PDF tests are checking yesterday's templates:\n  " +
+          stale.join("\n  ") +
+          "\nRun: node scripts/emit-html.mjs",
+      );
+      process.exit(1);
+    }
+    console.log(`Rendered HTML is current (${files.size} files).`);
+    return;
+  }
+
+  rmSync(OUT, { recursive: true, force: true });
+  mkdirSync(OUT, { recursive: true });
+  for (const [name, html] of files) writeFileSync(join(OUT, name), html);
+  console.log(`Wrote ${files.size} files to ${OUT}`);
+}
+
+main();
