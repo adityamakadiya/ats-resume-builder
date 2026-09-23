@@ -49,6 +49,9 @@ export function ChooseSource() {
         documentId?: string;
         reason?: string;
         remedy?: string;
+        /* False when the file stored but nothing could read it. */
+        parsed?: boolean;
+        parseProblem?: { reason: string; remedy: string } | null;
       };
       try {
         payload = await response.json();
@@ -66,6 +69,33 @@ export function ChooseSource() {
           kind: "failed",
           reason: payload.reason ?? "The upload was refused.",
           remedy: payload.remedy ?? "Try a different file, or try again in a moment.",
+        });
+        return;
+      }
+
+      /*
+        Stored but unreadable is not success, even though the request
+        succeeded.
+
+        The route deliberately does not fail the upload when parsing fails,
+        because a document service that is down is an operator's problem and
+        not a reason to make someone upload again. But the consequence is
+        real and it has to be said here: with no extraction there are no
+        facts, so the template preview shows a sample, the editor opens on a
+        sample, and nothing can be verified against anything. Walking the
+        user silently onward to a picker full of an invented person's resume
+        is how this looked like three unrelated bugs.
+      */
+      if (payload.parsed === false) {
+        setPhase({
+          kind: "failed",
+          reason:
+            payload.parseProblem?.reason ??
+            "Your file was stored, but nothing could read it.",
+          remedy:
+            (payload.parseProblem?.remedy ??
+              "Try uploading it again.") +
+            " Your file is saved, so nothing is lost.",
         });
         return;
       }

@@ -376,8 +376,21 @@ export const useEditorStore = create<EditorStore>()(
         state.history = { past: [], future: [] };
         state.droppedViolations = [];
         state.saveState = run.saved ? { kind: "clean" } : { kind: "sample" };
-        // The refusal is the first thing worth seeing, so it opens itself.
-        state.unverifiableOpen = !run.truth.passed && run.truth.violations.length > 0;
+        /*
+          Opening the editor does NOT open the refusal dialog.
+
+          It used to, on the reasoning that a refusal is the first thing
+          worth seeing. That is true the moment a rewrite produces one,
+          which is why loadTailored still opens it. It is not true on
+          arrival: a document carries its refusals with it, so every visit
+          to a resume that has ever had one was met by a modal about a
+          decision taken on some earlier visit, before the user had even
+          seen the page they came for.
+
+          The provenance block already says "N lines refused. See why" and
+          it is a link. Discoverable, not interrupting.
+        */
+        state.unverifiableOpen = false;
         state.messages = [];
         state.steps = {};
       }),
