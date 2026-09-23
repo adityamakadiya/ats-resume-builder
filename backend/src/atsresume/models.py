@@ -352,10 +352,30 @@ class TailoredResume(BaseModel):
 
 
 class SubScores(BaseModel):
+    """The dimensions a score is built from, as the UI draws them.
+
+    The first four are v1's. ``section_completeness`` is retained only so a
+    stored run from before the rewrite still loads; it always returned 100 on a
+    document this pipeline produced, which is why it is no longer weighted.
+
+    The rest are v2's, defaulted so that old rows deserialise. ``evidence`` and
+    ``specificity`` are what stop the score being keyword overlap wearing a
+    four-dimensional costume: cramming terms into a bullet raises coverage while
+    lowering both of them.
+    """
+
     keyword_match: float
     skills_coverage: float
     section_completeness: float
     experience_match: float
+
+    evidence_density: float = 0.0
+    specificity: float = 0.0
+    # How far evidence and specificity were scaled back for a document that is
+    # well written but not about this job. Well-set prose about unrelated work
+    # should not score like a match.
+    relevance_gate: float = 1.0
+    penalty: float = 0.0
 
 
 class AtsReport(BaseModel):

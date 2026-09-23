@@ -1,0 +1,517 @@
+/* =========================================================================
+   The print contract.
+
+   One stylesheet, no build step. Headless Chromium loads this file and gets
+   the same page the browser showed, which is the only way a preview can be
+   trusted.
+
+   Two rules hold the whole thing together:
+
+   1. The page box has no margin. `@page { margin: 0 }` and the document
+      supplies its own padding, so screen and print agree on where the text
+      starts. A UA-supplied print margin is the classic reason a preview and
+      its PDF disagree by a few millimetres and then by a whole line.
+
+   2. Nothing is hardcoded. Every size, gap and leading comes from a custom
+      property set by the density ladder below, so fitting a page is a single
+      attribute change and never a per-template edit.
+   ========================================================================= */
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------------------
+   The density ladder, ported from backend/src/atsresume/render/density.py.
+
+   The budget is spent in the order a typesetter would spend it: page margins
+   first, because generous margins are a convention and nobody misses them;
+   then the gaps between blocks, which carry structure and can tighten a long
+   way before the structure stops reading; then line spacing, which is only
+   noticeable against a comparison; and body type last.
+
+   Body type never goes below 9pt. Below that a resume fails the recruiter
+   reading it on a phone and the one printing it, so the ladder stops. Content
+   that still overflows at rung 4 is a content problem and gets reported as
+   one. See fit.ts: nothing is ever silently cut to make a page count look
+   right.
+   ------------------------------------------------------------------------- */
+
+[data-density="0"] {
+  --page-pad: 0.75in;
+  --block-gap: 1;
+  --leading: 1.35;
+  --body: 11pt;
+}
+[data-density="1"] {
+  --page-pad: 0.68in;
+  --block-gap: 0.88;
+  --leading: 1.3;
+  --body: 10.5pt;
+}
+[data-density="2"] {
+  --page-pad: 0.6in;
+  --block-gap: 0.76;
+  --leading: 1.24;
+  --body: 10pt;
+}
+[data-density="3"] {
+  --page-pad: 0.52in;
+  --block-gap: 0.65;
+  --leading: 1.18;
+  --body: 9.5pt;
+}
+[data-density="4"] {
+  --page-pad: 0.45in;
+  --block-gap: 0.55;
+  --leading: 1.12;
+  --body: 9pt;
+}
+
+/* -------------------------------------------------------------------------
+   Tokens.
+
+   Spacing is expressed in em so it tracks the body size the rung chose, then
+   scaled by --block-gap so a rung can tighten structure without touching type.
+   ------------------------------------------------------------------------- */
+
+.rz {
+  --ink: #16181d;
+  --ink-soft: #3b4048;
+  --ink-mute: #5c626c;
+  --rule: #c7ccd4;
+  --rule-strong: #16181d;
+  --accent: #1c3f66;
+  --panel: #f2f4f7;
+
+  /* Type scale. Restrained: four steps, not eight. */
+  --t-name: 1.95em;
+  --t-headline: 1em;
+  --t-h2: 0.82em;
+  --t-role: 1em;
+  --t-meta: 0.93em;
+  --t-small: 0.88em;
+
+  --gap-section: calc(var(--block-gap) * 1.15em);
+  --gap-entry: calc(var(--block-gap) * 0.78em);
+  --gap-head: calc(var(--block-gap) * 0.42em);
+  --gap-line: calc(var(--block-gap) * 0.2em);
+  --rule-offset: calc(var(--block-gap) * 0.26em);
+
+  /* A4 at 96dpi. fit.ts reads this so one number defines the page. */
+  --page-w: 210mm;
+  --page-h: 297mm;
+}
+
+/* ------------------------------------------------------------- the page -- */
+
+.rz {
+  box-sizing: border-box;
+  width: var(--page-w);
+  min-height: var(--page-h);
+  padding: var(--page-pad);
+  margin: 0 auto;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+  font-size: var(--body);
+  line-height: var(--leading);
+  font-variant-numeric: tabular-nums lining-nums;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+
+  /* Accent rules and the Modern sidebar are structure, not decoration.
+     Without this Chromium drops them from the printed file. */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+
+  /* A line stranded at the top or bottom of a page reads as a mistake. */
+  orphans: 2;
+  widows: 2;
+}
+
+.rz *,
+.rz *::before,
+.rz *::after {
+  box-sizing: inherit;
+}
+
+.rz p,
+.rz ul,
+.rz ol,
+.rz h1,
+.rz h2,
+.rz h3,
+.rz dl,
+.rz dd,
+.rz dt {
+  margin: 0;
+  padding: 0;
+}
+
+.rz ul {
+  list-style: none;
+}
+
+.rz a {
+  color: inherit;
+  text-decoration: none;
+  /* A long URL must not push the column wider than the page. */
+  overflow-wrap: anywhere;
+}
+
+.rz a:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------- header -- */
+
+.rz-header {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.rz-name {
+  font-size: var(--t-name);
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.rz-headline {
+  margin-top: calc(var(--block-gap) * 0.24em);
+  font-size: var(--t-headline);
+  line-height: 1.25;
+  color: var(--ink-soft);
+}
+
+.rz-contact {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: calc(var(--block-gap) * 0.42em);
+  font-size: var(--t-meta);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+/* The separator is drawn, never written. Text content stays ASCII for the
+   parser, and a missing field can never leave a dangling divider behind. */
+.rz-contact > li + li::before {
+  content: "\00B7";
+  margin: 0 0.5em;
+  color: var(--rule);
+}
+
+/* -------------------------------------------------------------- section -- */
+
+.rz-section {
+  margin-top: var(--gap-section);
+}
+
+.rz-section:first-of-type {
+  margin-top: 0;
+}
+
+.rz-h2 {
+  font-size: var(--t-h2);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding-bottom: var(--rule-offset);
+  border-bottom: 0.6pt solid var(--rule-strong);
+  margin-bottom: calc(var(--gap-head) * 1.1);
+
+  /* A heading is never the last thing on a page. */
+  break-after: avoid;
+  page-break-after: avoid;
+  break-inside: avoid;
+}
+
+.rz-summary {
+  text-align: left;
+  max-width: 68em;
+}
+
+/* ---------------------------------------------------------------- entry -- */
+
+/* A role is one unit of meaning. Splitting it across a page break makes the
+   bullets look like they belong to the next employer. */
+.rz-entry {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-top: var(--gap-entry);
+}
+
+.rz-entry:first-child {
+  margin-top: 0;
+}
+
+/* Employer left, dates hard right on the same baseline. */
+.rz-entry-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.rz-entry-title {
+  font-size: var(--t-role);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.rz-entry-org {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.rz-entry-line--sub {
+  margin-top: calc(var(--gap-line) * 0.5);
+  font-size: var(--t-meta);
+  color: var(--ink-mute);
+}
+
+.rz-dates {
+  flex: 0 0 auto;
+  font-size: var(--t-meta);
+  color: var(--ink-mute);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rz-entry-note {
+  margin-top: var(--gap-line);
+  font-size: var(--t-meta);
+  color: var(--ink-soft);
+}
+
+/* -------------------------------------------------------------- bullets -- */
+
+.rz-bullets {
+  list-style: disc outside;
+  margin-top: var(--gap-head);
+  padding-left: 1.05em;
+}
+
+.rz-bullets > li {
+  margin-top: var(--gap-line);
+  padding-left: 0.12em;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rz-bullets > li:first-child {
+  margin-top: 0;
+}
+
+.rz-bullets > li::marker {
+  color: var(--ink-mute);
+  font-size: 0.85em;
+}
+
+/* --------------------------------------------------------------- skills -- */
+
+/* A definition list, because that is what it is: a category and its members.
+   The grid keeps every category label on one optical column without the
+   table markup that trips some parsers. */
+.rz-skills {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.85em;
+  row-gap: var(--gap-line);
+}
+
+.rz-skill-row {
+  display: contents;
+}
+
+.rz-skills > dt {
+  font-weight: 650;
+  color: var(--ink);
+  break-inside: avoid;
+}
+
+.rz-skills > dd {
+  color: var(--ink-soft);
+}
+
+/* Stacked variant for a narrow column. */
+.rz-skills--stacked {
+  display: block;
+}
+
+.rz-skills--stacked > dt {
+  margin-top: var(--gap-head);
+}
+
+.rz-skills--stacked > dt:first-child {
+  margin-top: 0;
+}
+
+.rz-skills--stacked > dd {
+  font-size: var(--t-small);
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------ education -- */
+
+.rz-edu-degree {
+  color: var(--ink-soft);
+  font-size: var(--t-meta);
+  margin-top: calc(var(--gap-line) * 0.5);
+}
+
+.rz-plain {
+  margin: 0;
+  padding-left: 1.05em;
+  list-style: disc outside;
+}
+
+.rz-plain > li {
+  margin-top: var(--gap-line);
+  break-inside: avoid;
+}
+
+.rz-plain > li:first-child {
+  margin-top: 0;
+}
+
+/* =========================================================================
+   Standard: roomy and conservative. One column, a rule under each heading,
+   dates right-aligned. The safest thing to hand a parser.
+   ========================================================================= */
+
+.rz--standard .rz-header {
+  padding-bottom: calc(var(--block-gap) * 0.7em);
+  margin-bottom: var(--gap-section);
+  border-bottom: 1.4pt solid var(--rule-strong);
+}
+
+/* =========================================================================
+   Compact: the same skeleton, set tighter. For people with more to say.
+   It does not change the type scale, only the air around it, which is the
+   same order the density ladder spends in.
+   ========================================================================= */
+
+.rz--compact {
+  --t-name: 1.6em;
+  --gap-section: calc(var(--block-gap) * 0.82em);
+  --gap-entry: calc(var(--block-gap) * 0.55em);
+  --gap-head: calc(var(--block-gap) * 0.3em);
+  --gap-line: calc(var(--block-gap) * 0.14em);
+  --t-h2: 0.78em;
+}
+
+.rz--compact .rz-header {
+  padding-bottom: calc(var(--block-gap) * 0.45em);
+  margin-bottom: var(--gap-section);
+  border-bottom: 1pt solid var(--rule-strong);
+}
+
+.rz--compact .rz-h2 {
+  letter-spacing: 0.12em;
+}
+
+.rz--compact .rz-bullets {
+  padding-left: 0.95em;
+}
+
+/* =========================================================================
+   Modern: sidebar left for contact, skills and education; main column right
+   for the summary, experience and projects. Handsome, and honestly labelled
+   in the registry as something a parser may read out of order.
+   ========================================================================= */
+
+.rz--modern {
+  --t-name: 1.7em;
+  padding: 0;
+}
+
+.rz--modern .rz-cols {
+  display: grid;
+  grid-template-columns: 30% 1fr;
+  min-height: var(--page-h);
+  align-items: stretch;
+}
+
+.rz--modern .rz-aside {
+  padding: var(--page-pad) calc(var(--page-pad) * 0.72);
+  background: var(--panel);
+  border-right: 0.6pt solid var(--rule);
+}
+
+.rz--modern .rz-main {
+  padding: var(--page-pad) var(--page-pad) var(--page-pad) calc(var(--page-pad) * 0.78);
+  min-width: 0;
+}
+
+.rz--modern .rz-name {
+  color: var(--accent);
+}
+
+.rz--modern .rz-headline {
+  font-size: var(--t-small);
+}
+
+/* Down the sidebar the contact details are a stack, not a line, so the
+   inline separator has to go with the row layout. */
+.rz--modern .rz-contact--stacked {
+  display: block;
+  font-size: var(--t-small);
+}
+
+.rz--modern .rz-contact--stacked > li {
+  margin-top: var(--gap-line);
+  overflow-wrap: anywhere;
+}
+
+.rz--modern .rz-contact--stacked > li + li::before {
+  content: none;
+}
+
+.rz--modern .rz-aside .rz-h2 {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.rz--modern .rz-main .rz-h2 {
+  border-bottom-color: var(--rule-strong);
+}
+
+/* ------------------------------------------------------------ print fix -- */
+
+@media print {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+
+  .rz {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .rz--modern .rz-cols {
+    /* The sidebar fill has to run the full height of every printed page,
+       which a grid row cannot promise once the content breaks. */
+    min-height: var(--page-h);
+  }
+
+  .rz a {
+    text-decoration: none;
+  }
+}
+
+/* On screen the page is an object on a desk, not the whole window. */
+@media screen {
+  .rz {
+    box-shadow: 0 1px 2px rgba(16, 18, 22, 0.08), 0 8px 24px rgba(16, 18, 22, 0.08);
+  }
+}

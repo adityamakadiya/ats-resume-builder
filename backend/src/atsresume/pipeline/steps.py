@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from .. import store
+from ..config import get_settings
 from ..llm import structured
 from ..models import (
     AtsReport,
@@ -17,7 +18,9 @@ from ..models import (
     TailoredResume,
     TruthReport,
 )
-from ..truth.guard import run_truth_guard
+from ..config import get_settings
+from ..truth.entailment import check_entailment
+from ..truth.guard import entailment_pairs, merge_violations, run_truth_guard
 from . import prompts
 from .sanitize import sanitize
 from .scoring import compute_ats_report
@@ -106,6 +109,19 @@ def tailor_resume(
         ]
     )
 
+    def verify(draft: TailoredResume) -> TruthReport:
+        """Token checks first, then entailment on what survives them.
+
+        Ordering is a cost decision as much as a correctness one. The token
+        checks are free and catch the loud fabrications; running the model over
+        a draft that already has an invented metric in it would be paying to
+        learn something we already know.
+        """
+        report = run_truth_guard(draft, facts, raw_resume_text, jd_terms)
+        if not get_settings().enable_entailment:
+            return report
+        return merge_violations(report, check_entailment(entailment_pairs(draft, facts)))
+
     tailored = sanitize(
         structured(
             system=prompts.TAILOR,
@@ -114,7 +130,7 @@ def tailor_resume(
             step="tailor",
         )
     )
-    truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
+    truth = verify(tailored)
     repair_attempted = False
     first_draft_violations: list[str] = []
 
@@ -154,7 +170,7 @@ def tailor_resume(
                 step="tailor",
             )
         )
-        truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
+        truth = verify(tailored)
 
     return TailorOutcome(
         tailored=tailored,

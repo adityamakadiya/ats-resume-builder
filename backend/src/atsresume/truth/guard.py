@@ -113,6 +113,42 @@ def build_fact_index(facts: ResumeFacts) -> dict[str, str]:
     return index
 
 
+def entailment_pairs(
+    tailored: TailoredResume,
+    facts: ResumeFacts,
+) -> list[tuple[str, str, str]]:
+    """(location, source_text, rewritten_text) for the lines worth fact-checking.
+
+    Only prose lines go to the entailment check. A skills group is a list of
+    nouns, and asking a model whether a list entails another list produces
+    noise at the price of a token. Lines citing nothing are already caught by
+    UNSOURCED_LINE and do not need a second opinion.
+    """
+    index = build_fact_index(facts)
+    pairs: list[tuple[str, str, str]] = []
+    for location, text, source_ids in tailored.all_lines():
+        if location.startswith("Skills /") or not text.strip():
+            continue
+        source_text = " ".join(index[s] for s in source_ids if s in index).strip()
+        if source_text:
+            pairs.append((location, source_text, text))
+    return pairs
+
+
+def merge_violations(report: TruthReport, extra: list[TruthViolation]) -> TruthReport:
+    """Fold a second checker's findings into a report, recounting severities."""
+    if not extra:
+        return report
+    violations = [*report.violations, *extra]
+    errors = sum(1 for v in violations if v.severity == "error")
+    return TruthReport(
+        passed=errors == 0,
+        error_count=errors,
+        warning_count=len(violations) - errors,
+        violations=violations,
+    )
+
+
 def run_truth_guard(
     tailored: TailoredResume,
     facts: ResumeFacts,

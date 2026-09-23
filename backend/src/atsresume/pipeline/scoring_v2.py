@@ -583,8 +583,15 @@ def compute_ats_report(
         sub_scores=SubScores(
             keyword_match=b.keyword_coverage,
             skills_coverage=b.requirement_coverage,
-            section_completeness=b.evidence_density,  # slot reused, see docstring
+            # Not weighted any more. Reported as 100 because it always was on a
+            # document this pipeline produces; section_warnings() is where a
+            # genuinely missing section now surfaces.
+            section_completeness=100.0,
             experience_match=b.experience_match,
+            evidence_density=b.evidence_density,
+            specificity=b.specificity,
+            relevance_gate=b.quality_gate,
+            penalty=b.penalty.total,
         ),
         matched_keywords=b.matched_keywords,
         missing_keywords=b.missing_keywords,

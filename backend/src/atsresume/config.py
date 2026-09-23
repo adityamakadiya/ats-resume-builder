@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     # identical text every time is the easiest money in the pipeline to stop
     # spending.
     cache_facts: bool = True
+    # The third truth layer. The token checks are free and catch invented
+    # numbers and technologies; this one costs a cheap call and catches the
+    # fabrications that carry neither, which are the ones that end interviews.
+    # Switchable because it is the only check that can be wrong.
+    enable_entailment: bool = True
     # Deliberately not a temp directory. The previous cache lived in one and the
     # operating system cleared it, which meant the only state in the system was
     # state that quietly disappeared.
