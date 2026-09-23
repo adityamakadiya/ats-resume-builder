@@ -9,6 +9,17 @@
  * 2. Every field has a default, so `Schema.parse({})`-shaped input from a
  *    partial document still yields a complete object. The one exception is
  *    `SourceDocument.style`, which models.py declares as `StyleProfile | None`.
+ *
+ * NESTED OBJECT DEFAULTS USE `.prefault({})`, NOT `.default({})`.
+ *
+ * Zod 3 parsed the value handed to `.default()`, so `.default({})` on an
+ * object schema filled in that object's own defaults. Zod 4 returns the
+ * value as given. Under `.default({})` on Zod 4, `facts.contact` comes back
+ * as `{}` while TypeScript still types it as a full Contact, so
+ * `facts.contact.name.trim()` typechecks and throws at runtime on exactly
+ * the documents where a field was missing, which is to say the ones the
+ * defaults existed for. `.prefault()` is Zod 4's parse-the-default, and it
+ * restores the behaviour models.py has always had.
  */
 
 import { z } from 'zod';
@@ -84,7 +95,7 @@ export const OtherSectionSchema = z.object({
 });
 
 export const ResumeFactsSchema = z.object({
-  contact: ContactSchema.default({}),
+  contact: ContactSchema.prefault({}),
   headline: str(),
   summary: str(),
   experience: z.array(ExperienceFactSchema).default([]),
@@ -158,7 +169,7 @@ export const JobSpecSchema = z.object({
   location: str(),
   work_mode: WorkModeSchema,
   employment_type: str(),
-  experience_years: ExperienceYearsSchema.default({}),
+  experience_years: ExperienceYearsSchema.prefault({}),
   requirements: z.array(RequirementSchema).default([]),
   responsibilities: z.array(z.string()).default([]),
   keywords: z.array(KeywordSchema).default([]),
@@ -273,7 +284,7 @@ export const TailoredOtherSectionSchema = z.object({
 
 export const TailoredResumeSchema = z.object({
   headline: str(),
-  summary: TailoredSummarySchema.default({}),
+  summary: TailoredSummarySchema.prefault({}),
   skills: z.array(TailoredSkillGroupSchema).default([]),
   experience: z.array(TailoredExperienceSchema).default([]),
   projects: z.array(TailoredProjectSchema).default([]),
@@ -326,7 +337,7 @@ export const SubScoresSchema = z.object({
 
 export const AtsReportSchema = z.object({
   overall: z.number().default(0),
-  sub_scores: SubScoresSchema.default({}),
+  sub_scores: SubScoresSchema.prefault({}),
   matched_keywords: z.array(z.string()).default([]),
   missing_keywords: z.array(z.string()).default([]),
   recoverable_keywords: z.array(z.string()).default([]),
@@ -404,10 +415,10 @@ export const ColumnBandSchema = z.object({
 export const StyleProfileSchema = z.object({
   page_width: z.number().default(0),
   page_height: z.number().default(0),
-  margins: MarginsSchema.default({}),
+  margins: MarginsSchema.prefault({}),
   column_count: z.number().int().default(1),
   column_bands: z.array(ColumnBandSchema).default([]),
-  font_sizes: FontSizesSchema.default({}),
+  font_sizes: FontSizesSchema.prefault({}),
   body_line_height: z.number().default(0),
   bullet_glyph: str('•'),
   accent_color: str(),

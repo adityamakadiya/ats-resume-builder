@@ -30,6 +30,7 @@
  *    is a test for this; do not edit prompts casually.
  */
 
+import { toJsonSchema } from "@ats/core";
 import OpenAI from "openai";
 import { z } from "zod";
 
@@ -89,45 +90,6 @@ function getClient(): OpenAI {
   return client;
 }
 
-/* ------------------------------------------------------------------ schema */
-
-type JsonSchema = Record<string, unknown>;
-
-/**
- * Make a generated JSON Schema acceptable to strict structured output.
- *
- * Every object gets `additionalProperties: false` and a `required` array
- * naming all of its properties. Defaults stay in the schema as documentation
- * but stop being a licence for the model to omit the key, which is exactly the
- * behaviour we want: a missing field and an empty field are different bugs and
- * only one of them is detectable downstream.
- */
-export function strictify(schema: JsonSchema): JsonSchema {
-  const walk = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    if (!node || typeof node !== "object") return;
-
-    const obj = node as Record<string, unknown>;
-    if (obj.type === "object" && obj.properties && typeof obj.properties === "object") {
-      obj.additionalProperties = false;
-      obj.required = Object.keys(obj.properties as Record<string, unknown>);
-    }
-    // Strict mode rejects several annotation keywords outright. They are
-    // documentation, so dropping them costs nothing and keeps the grammar
-    // small enough to compile.
-    for (const key of ["default", "format", "$schema", "examples"]) delete obj[key];
-
-    Object.values(obj).forEach(walk);
-  };
-
-  const cloned = structuredClone(schema);
-  walk(cloned);
-  return cloned;
-}
-
 /* ------------------------------------------------------------------- call  */
 
 export type StructuredOptions<T extends z.ZodTypeAny> = {
@@ -152,9 +114,9 @@ export async function structured<T extends z.ZodTypeAny>(
   const config = configFor(step);
   const started = Date.now();
 
-  const jsonSchema = strictify(
-    z.toJSONSchema(schema, { target: "draft-2020-12", io: "output" }) as JsonSchema,
-  );
+  // @ats/core owns this conversion, and owns the tests for it. Two copies of
+  // "what strict mode accepts" is two answers to one question.
+  const jsonSchema = toJsonSchema(schema, schemaName);
 
   let lastError: LLMError | null = null;
 

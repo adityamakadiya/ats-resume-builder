@@ -146,20 +146,51 @@ describe('toJsonSchema', () => {
     expect(kwProps['weight']!['type']).toBe('integer');
   });
 
-  it('keeps defaults as documentation without making the key optional', () => {
+  it('strips defaults while keeping the key required', () => {
+    // A defaulted field stays required, which is the whole point: the model
+    // has to state its answer, including when the answer is the empty string.
+    // The `default` keyword itself is dropped because strict mode's supported
+    // keyword list is narrow and a rejected schema surfaces as an error that
+    // reads like a bad prompt. It was only ever documentation, and dropping it
+    // also keeps the compiled grammar small enough to accept.
     const json = toJsonSchema(JobSpecSchema) as Record<string, unknown>;
     const props = json['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['location']!['default']).toBe('');
+
+    expect(props['location']!['default']).toBeUndefined();
+    expect(props['location']!['type']).toBe('string');
     expect(json['required']).toContain('location');
   });
 
-  it('renders the one nullable field as a type union', () => {
+  it('renders the one nullable field as an anyOf', () => {
+    // Zod 4 emits `anyOf: [T, {type: "null"}]` where Zod 3 emitted
+    // `type: ["object", "null"]`. Both are valid JSON Schema and mean the same
+    // thing; this asserts the shape rather than a preference, so that a future
+    // change to it is a deliberate edit and not a surprise.
     const json = toJsonSchema(SourceDocumentSchema) as Record<string, unknown>;
     const props = json['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['style']!['type']).toEqual(['object', 'null']);
+    const variants = props['style']!['anyOf'] as Array<Record<string, unknown>>;
+
+    expect(variants).toHaveLength(2);
+    expect(variants.map((v) => v['type'])).toContain('null');
+    expect(variants.some((v) => v['type'] === 'object')).toBe(true);
   });
 
   it('throws rather than quietly emitting a permissive schema', () => {
-    expect(() => toJsonSchema(z.map(z.string(), z.string()))).toThrow(/unsupported Zod node/);
+    // The message is the converter's own now that Zod does the conversion.
+    // What matters is that an unrepresentable type is refused: emitting a
+    // permissive schema instead would let the model return anything at all
+    // for that field and have it validate.
+    expect(() => toJsonSchema(z.map(z.string(), z.string()))).toThrow(
+      /cannot be represented in JSON Schema/i,
+    );
+  });
+
+  it('closes every object even when a schema is reused', () => {
+    // Reused subschemas are inlined rather than emitted as $ref, so the strict
+    // walker reaches all of them. A $ref would sail past it and leave one
+    // object open, which is the failure mode this asserts against.
+    const json = JSON.stringify(toJsonSchema(TailoredResumeSchema));
+    expect(json).not.toContain('$ref');
+    expect(json).not.toContain('$defs');
   });
 });

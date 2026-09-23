@@ -24,7 +24,22 @@
   ===========================================================================
 */
 
-@custom-variant dark (&:where(.dark, .dark *, :root:not(.light) *):where(*));
+/*
+  shadcn's components carry `dark:` utilities. The stock variant is
+  class-only, which would leave them stranded when the theme is driven by the
+  media query. This variant fires for both, so an explicit `.light` class can
+  still pin the light theme on a dark-set machine.
+*/
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not(.light), :root:not(.light) *) {
+      @slot;
+    }
+  }
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+}
 
 /* -------------------------------------------------------------- light -- */
 
@@ -44,6 +59,11 @@
   --stamp-soft: #f3e2dc;
   --traced: #2f6b46;
   --traced-soft: #e2ece5;
+  /* Legacy alias. The honest word is 'traced', but the prototype in
+     src/app/_components still styles with these and the editor agent is
+     mining that file. Same value, one name to migrate to. */
+  --verified: var(--traced);
+  --verified-soft: var(--traced-soft);
   --caution: #8a6117;
   --caution-soft: #f5ecd8;
 
@@ -96,11 +116,8 @@
   OLED. The stamp gains lightness and loses a little chroma so it stays a
   stamp and does not become a neon.
 */
-@mixin-placeholder {
-}
-
-:root:not(.light) {
-  @media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
     color-scheme: dark;
 
     --paper: #131210;
@@ -116,6 +133,8 @@
     --stamp-soft: #3a211a;
     --traced: #6fbf8e;
     --traced-soft: #16281d;
+    --verified: var(--traced);
+    --verified-soft: var(--traced-soft);
     --caution: #d8a94e;
     --caution-soft: #2d2415;
 
@@ -146,6 +165,8 @@
   --stamp-soft: #3a211a;
   --traced: #6fbf8e;
   --traced-soft: #16281d;
+  --verified: var(--traced);
+  --verified-soft: var(--traced-soft);
   --caution: #d8a94e;
   --caution-soft: #2d2415;
 
@@ -174,6 +195,8 @@
   --color-stamp-soft: var(--stamp-soft);
   --color-traced: var(--traced);
   --color-traced-soft: var(--traced-soft);
+  --color-verified: var(--verified);
+  --color-verified-soft: var(--verified-soft);
   --color-caution: var(--caution);
   --color-caution-soft: var(--caution-soft);
 

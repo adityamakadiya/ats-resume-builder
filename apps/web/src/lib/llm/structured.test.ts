@@ -33,7 +33,7 @@ vi.mock("openai", () => {
   return { default: OpenAI, APIError };
 });
 
-const { structured, strictify, LLMError } = await import("./structured");
+const { structured, LLMError } = await import("./structured");
 const OpenAIStub = (await import("openai")).default as unknown as {
   APIError: new (status: number, message: string) => Error;
 };
@@ -75,48 +75,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-/* ---------------------------------------------------------------- schema  */
-
-describe("strictify", () => {
-  it("requires every property and forbids the rest", () => {
-    const out = strictify({
-      type: "object",
-      properties: { a: { type: "string" }, b: { type: "number", default: 0 } },
-      required: ["a"],
-    }) as Record<string, unknown>;
-
-    expect(out.additionalProperties).toBe(false);
-    // b had a default, which a schema generator reads as "optional". Strict
-    // mode disagrees, and so do we: a missing field and an empty field are
-    // different bugs and only one of them is visible downstream.
-    expect(out.required).toEqual(["a", "b"]);
-    expect((out.properties as Record<string, Record<string, unknown>>).b.default).toBeUndefined();
-  });
-
-  it("reaches into nested objects and arrays", () => {
-    const out = strictify({
-      type: "object",
-      properties: {
-        items: {
-          type: "array",
-          items: { type: "object", properties: { x: { type: "string" } }, required: [] },
-        },
-      },
-      required: ["items"],
-    }) as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
-
-    expect(out.properties.items.items.additionalProperties).toBe(false);
-    expect(out.properties.items.items.required).toEqual(["x"]);
-  });
-
-  it("does not mutate the schema it was given", () => {
-    const input = { type: "object", properties: { a: { type: "string" } }, required: [] };
-    const snapshot = JSON.stringify(input);
-    strictify(input);
-    expect(JSON.stringify(input)).toBe(snapshot);
-  });
 });
 
 /* ----------------------------------------------------------------- calls  */
