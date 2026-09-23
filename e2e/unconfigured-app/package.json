@@ -1,0 +1,6 @@
+{
+  "name": "ats-web-unconfigured",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Scratch Next project used by the tier1-unconfigured e2e project. src/ and node_modules are recreated on every boot by e2e/harness/serve-unconfigured.mjs."
+}

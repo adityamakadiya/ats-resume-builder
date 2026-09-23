@@ -164,24 +164,46 @@ export async function POST(request: Request) {
   }
 
   if (parsed) {
-    // Text first. The truth guard reads documents.raw_text, so this column
-    // is what every later verification is checked against.
-    const { error: updateError } = await supabase
+    /*
+      Two writes, not one, and the split is deliberate.
+
+      The first carries raw_text, which the truth guard checks every
+      rewritten line against and which therefore matters more than anything
+      else here. The second carries facts_json, which migration 0008 adds.
+
+      Combined, a database one migration behind fails the whole statement on
+      the unknown column and loses the text as well, which is how a missing
+      nicety turns into a resume that cannot be verified. Postgres has no
+      partial update: one bad column rejects the row. So the important
+      column goes on its own.
+    */
+    const { error: textError } = await supabase
       .from("documents")
       .update({
         raw_text: parsed.rawText,
         page_count: parsed.pageCount,
         style_json: parsed.style,
         notes: parsed.notes,
-        // The nested extraction, for rebuilding the candidate's own
-        // document. The flattened facts rows below cannot do that
-        // without losing which bullets belong to which role.
-        facts_json: parsed.facts,
       })
       .eq("id", documentId);
 
-    if (updateError) {
-      console.warn("[upload] could not store parsed text:", updateError.message);
+    if (textError) {
+      console.warn("[upload] could not store parsed text:", textError.message);
+    }
+
+    // The nested extraction, for rebuilding the candidate's own document.
+    // The flattened facts rows below cannot do that without losing which
+    // bullets belong to which role.
+    const { error: factsJsonError } = await supabase
+      .from("documents")
+      .update({ facts_json: parsed.facts })
+      .eq("id", documentId);
+
+    if (factsJsonError) {
+      console.warn(
+        "[upload] could not store the extraction (migration 0008 may be missing):",
+        factsJsonError.message
+      );
     }
 
     // The ledger. origin 'document' marks these as things the uploaded file

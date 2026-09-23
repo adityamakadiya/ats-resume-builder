@@ -1,0 +1,5 @@
+# Everything here is recreated on boot by ../harness/serve-unconfigured.mjs.
+*
+!.gitignore
+!next.config.ts
+!package.json
