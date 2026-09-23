@@ -83,6 +83,15 @@ class PdfLayout:
     lines: list[Line]
     style: StyleProfile
     page_count: int
+    #: Hyperlink targets embedded in the document, in page order.
+    #:
+    #: Worth reading because the target is often better than the text over
+    #: it. A measured example: a resume printed '097379 32872' and carried
+    #: 'tel:+91-97379-32872' underneath. Reading only the glyphs loses the
+    #: country code, and a recruiter abroad cannot dial what is left. The
+    #: same applies to a shortened profile URL, or to a name hyperlinked to
+    #: a portfolio with no visible address at all.
+    links: list[str] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -338,6 +347,32 @@ def _style_profile(
     )
 
 
+def _read_links(doc: pymupdf.Document, page_count: int) -> list[str]:
+    """Hyperlink targets, de-duplicated, in page order.
+
+    Only external targets. An internal jump to another page of the same
+    document says nothing about the candidate, and `None` uris appear for
+    widget annotations that carry no destination at all.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for index in range(page_count):
+        try:
+            links = doc[index].get_links()
+        except Exception:  # a malformed annotation must not fail the upload
+            continue
+        for link in links:
+            uri = link.get("uri")
+            if not isinstance(uri, str):
+                continue
+            uri = uri.strip()
+            if not uri or uri in seen or len(uri) > 500:
+                continue
+            seen.add(uri)
+            out.append(uri)
+    return out
+
+
 def read_pdf(data: bytes) -> PdfLayout:
     """Read a PDF into reading-order text plus the design it was set in."""
     try:
@@ -355,6 +390,7 @@ def read_pdf(data: bytes) -> PdfLayout:
 
         spans, page_width, page_height = _read_spans(doc)
         page_count = min(doc.page_count, MAX_PAGES)
+        links = _read_links(doc, page_count)
     finally:
         doc.close()
 
@@ -377,4 +413,6 @@ def read_pdf(data: bytes) -> PdfLayout:
     text = dehyphenate("\n".join(line.text for line in lines))
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
-    return PdfLayout(text=text, lines=lines, style=style, page_count=page_count)
+    return PdfLayout(
+        text=text, lines=lines, style=style, page_count=page_count, links=links
+    )

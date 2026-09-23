@@ -115,9 +115,28 @@ def ingest_resume(filename: str, data: bytes) -> SourceDocument:
                 f"{layout.page_count} pages. Most recruiters read the first page; the tailored "
                 "version targets one to two."
             )
+        text = layout.text
+        if layout.links:
+            """
+            The document's own hyperlink targets, appended as a labelled
+            block rather than merged into the prose.
+
+            They belong in raw_text and not only in a side channel, because
+            raw_text is the corpus the truth guard checks every rewritten
+            line against. A profile URL that exists solely as a link target
+            is still something the candidate published; if it were left out
+            here, a rewrite that mentioned it would be rejected as invented.
+
+            Labelled so the extractor can tell a link from a line of the
+            resume, and placed last so it cannot disturb the section order
+            the reader worked out from the layout.
+            """
+            joined = "\n".join(layout.links)
+            text = f"{text}\n\nLINKS (hyperlink targets embedded in the file)\n{joined}"
+
         doc = SourceDocument(
             kind=SourceKind.PDF,
-            raw_text=layout.text,
+            raw_text=text,
             page_count=layout.page_count,
             style=layout.style,
             notes=notes,

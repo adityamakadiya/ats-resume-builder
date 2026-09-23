@@ -106,3 +106,110 @@ def test_style_profile_of_a_real_resume():
     assert style.fonts, "no font names recovered"
     assert style.accent_color.startswith("#"), f"no accent recovered: {style.accent_color!r}"
     assert "Bacancy" in layout.text
+
+
+# --------------------------------------------------------------------------- #
+# Hyperlinks                                                                   #
+# --------------------------------------------------------------------------- #
+#
+# A resume's link targets are frequently better data than the glyphs printed
+# over them. Measured on a real file: the page showed "097379 32872" and the
+# annotation underneath said "tel:+91-97379-32872". Reading only the text
+# loses the country code, and a recruiter in another country cannot dial what
+# is left. Shortened profile URLs and a name linked to a portfolio are the
+# same shape of loss.
+
+
+def _pdf_with_links(pairs: list[tuple[str, str]]) -> bytes:
+    """A page whose visible text differs from what it links to."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    y = 80.0
+    for label, uri in pairs:
+        point = pymupdf.Point(56.0, y)
+        page.insert_text(point, label, fontsize=10, fontname="helv")
+        page.insert_link(
+            {
+                "kind": pymupdf.LINK_URI,
+                "from": pymupdf.Rect(56.0, y - 10, 300.0, y + 4),
+                "uri": uri,
+            }
+        )
+        y += 24.0
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_link_targets_are_read_not_just_the_text_over_them():
+    data = _pdf_with_links(
+        [
+            ("097379 32872", "tel:+91-97379-32872"),
+            ("my profile", "https://linkedin.com/in/adityamakadiya"),
+        ]
+    )
+
+    layout = read_pdf(data)
+
+    assert "tel:+91-97379-32872" in layout.links
+    assert "https://linkedin.com/in/adityamakadiya" in layout.links
+    # The printed form is still the printed form; the link is extra, not a
+    # replacement. Deciding between them is the extractor's job.
+    assert "097379 32872" in layout.text
+
+
+def test_links_are_deduplicated_and_ordered():
+    data = _pdf_with_links(
+        [
+            ("github", "https://github.com/x"),
+            ("github again", "https://github.com/x"),
+            ("site", "https://example.com"),
+        ]
+    )
+
+    layout = read_pdf(data)
+
+    assert layout.links == ["https://github.com/x", "https://example.com"]
+
+
+def test_a_pdf_with_no_links_reports_none():
+    """Most resumes have no annotations at all, and that is not an error."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text(
+        pymupdf.Point(56.0, 80.0),
+        "Backend Engineer at Acme Payments",
+        fontsize=10,
+        fontname="helv",
+    )
+    plain = doc.tobytes()
+    doc.close()
+
+    layout = read_pdf(plain)
+    assert layout.links == []
+
+
+def test_links_reach_raw_text_so_the_guard_can_see_them():
+    """A URL that exists only as a link target is still something the
+    candidate published. If it were kept out of the corpus, a rewrite that
+    mentioned it would be rejected as an invention."""
+    from atsresume.ingest.resume import ingest_resume
+
+    data = _pdf_with_links([("my profile", "https://linkedin.com/in/adityamakadiya")])
+    # Pad the page so the result clears the minimum-length check.
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    page = doc[0]
+    for i in range(14):
+        page.insert_text(
+            pymupdf.Point(56.0, 200.0 + i * 16),
+            "Built REST APIs in Node.js and Express for merchant settlement.",
+            fontsize=10,
+            fontname="helv",
+        )
+    padded = doc.tobytes()
+    doc.close()
+
+    source = ingest_resume("resume.pdf", padded)
+
+    assert "LINKS" in source.raw_text
+    assert "https://linkedin.com/in/adityamakadiya" in source.raw_text
