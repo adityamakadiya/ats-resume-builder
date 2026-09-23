@@ -33,7 +33,10 @@ test("/start names both missing variables", async ({ page }) => {
   ).toBeVisible();
 
   for (const key of MISSING) {
-    await expect(page.getByText(key, { exact: true })).toBeVisible();
+    // The panel puts an sr-only "Missing: " in front of each name, so the
+    // list reads as more than a column of identifiers to a screen reader.
+    // Asserting on both together keeps that from being dropped.
+    await expect(page.getByText(new RegExp(`^Missing:\\s*${key}$`))).toBeVisible();
   }
 
   // And it says where they go, not just that they are absent.
@@ -49,6 +52,20 @@ test("/login shows the same panel rather than a broken form", async ({ page }) =
   await expect(page.getByRole("button", { name: /continue with google/i })).toHaveCount(0);
 });
 
+/*
+  This one caught something the first time it ran, and then watched it get
+  fixed.
+
+  The setup panel was failing axe's colour contrast rule at serious impact on
+  seven nodes: --ink-faint was #8a94a6 on white, 3.05:1, where WCAG AA wants
+  4.5:1 for text that size. It was a real violation rather than an axe false
+  positive, so it was recorded as a `test.fail()` rather than disabled by
+  rule name or waved through by lowering the threshold. A redesign pass
+  darkened the token, the expected failure started reporting "expected to
+  fail but passed", and the marker came off. That is the loop this kind of
+  annotation is for, and it is why the threshold in support/a11y.ts has not
+  moved.
+*/
 test("/start has no serious or critical accessibility violations", async ({ page }) => {
   await page.goto("/start");
   await expectNoSeriousA11yViolations(page);

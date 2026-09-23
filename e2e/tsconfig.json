@@ -14,6 +14,8 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Same reason as `paths` below: nothing resolves upwards from here.
+    "typeRoots": ["../apps/web/node_modules/@types"],
     "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
@@ -27,6 +29,10 @@
       "playwright-core": ["../apps/web/node_modules/playwright-core"]
     }
   },
-  "include": ["**/*.ts"],
-  "exclude": ["unconfigured-app", "node_modules", "test-results", "playwright-report"]
+  /*
+    Listed rather than globbed. `unconfigured-app` holds a copy of the app's
+    own source, which has its own tsconfig and must not be typechecked
+    against this one.
+  */
+  "include": ["support/**/*.ts", "tier1/**/*.ts", "tier1-unconfigured/**/*.ts", "tier2/**/*.ts", "tier3/**/*.ts"]
 }

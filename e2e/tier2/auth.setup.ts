@@ -75,6 +75,15 @@ setup("sign in", async ({ request, baseURL }) => {
   // Always leave a file behind, even when skipping.
   writeState({ cookies: [], origins: [] });
 
+  if (!email || !password) {
+    // The reason below reaches the HTML report; this reaches the terminal,
+    // where the person running `npm run e2e` is actually looking.
+    console.warn(
+      "\n  tier 2 skipped: set E2E_EMAIL and E2E_PASSWORD to run the signed in\n" +
+        "  suite. See e2e/README.md for how to make an account that works.\n"
+    );
+  }
+
   setup.skip(
     !email || !password,
     "Tier 2 needs a real Supabase account. Set E2E_EMAIL and E2E_PASSWORD to " +
