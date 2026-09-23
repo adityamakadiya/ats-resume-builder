@@ -72,7 +72,7 @@ export function Suggestions({
     <div className="space-y-3 border-t border-rule pt-3">
       {recoverable.length > 0 && (
         <div>
-          <p className="label mb-1.5 text-verified">Put back — already yours</p>
+          <p className="label mb-1.5 text-verified">Already yours</p>
           <div className="flex flex-wrap gap-1">
             {recoverable.map((term) => (
               <Chip key={term} term={term} tone="recover" onAdd={() => onAddSkill(term, false)} />
@@ -83,15 +83,14 @@ export function Suggestions({
 
       {missing.length > 0 && (
         <div>
-          <p className="label mb-1.5">Wanted, not in your resume</p>
+          <p className="label mb-1.5">Not in your resume</p>
           <div className="flex flex-wrap gap-1">
             {missing.slice(0, 14).map((term) => (
               <Chip key={term} term={term} tone="assert" onAdd={() => onAddSkill(term, true)} />
             ))}
           </div>
           <p className="mt-1.5 text-[0.75rem] leading-snug text-ink-faint">
-            Adding one of these is your claim, not a verified one. Only do it if you can defend it
-            in the interview.
+            Your claim, not a verified one. Add only what you can defend.
           </p>
         </div>
       )}

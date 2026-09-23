@@ -7,6 +7,9 @@ exercise the same library the reader uses.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pymupdf
 import pytest
 
@@ -194,3 +197,24 @@ def tailored() -> TailoredResume:
         ],
         section_order=["summary", "skills", "experience", "education"],
     )
+
+
+# The calibration sample, shared with scripts/calibrate_density.py and the
+# thumbnail generator. Using the same document everywhere means a change to it
+# shows up in the tests, the ladder and the pictures at once, rather than the
+# three drifting apart.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+
+@pytest.fixture(scope="session")
+def sample_facts() -> ResumeFacts:
+    from sample import facts as _facts
+
+    return _facts()
+
+
+@pytest.fixture(scope="session")
+def sample_tailored() -> TailoredResume:
+    from sample import tailored as _tailored
+
+    return _tailored()

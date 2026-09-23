@@ -342,7 +342,14 @@ export async function deleteRun(id: number): Promise<void> {
   await unwrap(await fetch(`${BASE}/api/runs/${id}`, { method: "DELETE" }));
 }
 
-export type RenderedPdf = { blob: Blob; filename: string; warnings: string[] };
+export type RenderedPdf = {
+  blob: Blob;
+  filename: string;
+  warnings: string[];
+  /** How many pages it came out at, and whether that is the one page we aim for. */
+  pages: number;
+  fitted: boolean;
+};
 
 export async function renderPdf(
   tailored: TailoredResume,
@@ -363,5 +370,7 @@ export async function renderPdf(
     blob: await response.blob(),
     filename: disposition.match(/filename="(.+?)"/)?.[1] ?? "resume.pdf",
     warnings: warnings ? warnings.split(" | ").filter(Boolean) : [],
+    pages: Number(response.headers.get("x-render-pages") ?? 1),
+    fitted: (response.headers.get("x-render-fitted") ?? "1") === "1",
   };
 }

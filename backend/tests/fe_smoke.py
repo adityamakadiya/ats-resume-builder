@@ -21,6 +21,8 @@ import sys
 import pymupdf
 from playwright.sync_api import sync_playwright
 
+from atsresume.render.rendercv_adapter import THEMES
+
 BASE = os.environ.get("FE_BASE", "http://localhost:3001")
 API = "http://localhost:8000"
 
@@ -221,7 +223,9 @@ def main() -> int:
         # which the client cannot read the filename off the PDF response.
         CORS = {
             "access-control-allow-origin": BASE,
-            "access-control-expose-headers": "Content-Disposition, X-Render-Warnings",
+            "access-control-expose-headers": (
+                "Content-Disposition, X-Render-Warnings, X-Render-Pages, X-Render-Fitted"
+            ),
         }
 
         def stub(payload: dict):
@@ -242,7 +246,7 @@ def main() -> int:
         page.route(
             f"{API}/api/themes",
             stub({"default": "engineeringresumes",
-                  "themes": {"engineeringresumes": "Engineering resumes", "classic": "Classic"}}),
+                  "themes": THEMES}),
         )
         page.route(f"{API}/api/resume/parse", stub(PARSE))
         page.route(f"{API}/api/jd/fetch", stub(JD))
@@ -257,6 +261,8 @@ def main() -> int:
                     **CORS,
                     "content-disposition": 'attachment; filename="Aditya-Makadiya-Resume-Acme-Payments.pdf"',
                     "x-render-warnings": "",
+                    "x-render-pages": "1",
+                    "x-render-fitted": "1",
                 },
                 body=tiny_pdf(),
             ),
@@ -324,6 +330,8 @@ def main() -> int:
                     **CORS,
                     "content-disposition": 'attachment; filename="Aditya-Makadiya-Resume-Acme-Payments.pdf"',
                     "x-render-warnings": "",
+                    "x-render-pages": "1",
+                    "x-render-fitted": "1",
                 },
                 body=tiny_pdf(),
             )
@@ -339,7 +347,19 @@ def main() -> int:
             dl.value.suggested_filename,
         )
 
-        check("template picker is offered", page.get_by_label("PDF template").count() == 1)
+        check(
+            "the page count is reported after rendering",
+            page.get_by_text("One page", exact=True).count() == 1,
+        )
+        # A count describing a document you have since edited is worse than no
+        # count, so it has to disappear the moment the document changes.
+        page.get_by_label("Remove Prisma").click()
+        page.wait_for_timeout(200)
+        check(
+            "the page count is withdrawn once the document changes",
+            page.get_by_text("One page", exact=True).count() == 0,
+        )
+
         check("application status is offered", page.get_by_label("Application status").count() == 1)
 
         # One click on a recoverable term must land it in the document.
@@ -360,6 +380,38 @@ def main() -> int:
             sent.get("theme") == "engineeringresumes",
             str(sent.get("theme")),
         )
+
+        # The template control is a set of pictures now, not a list of names.
+        check("no template dropdown remains", page.get_by_label("PDF template").count() == 0)
+        thumbs = page.locator("button[aria-pressed]")
+        check(
+            "every template is shown as a thumbnail",
+            thumbs.count() == len(THEMES),
+            f"{thumbs.count()} of {len(THEMES)}",
+        )
+        missing = page.evaluate(
+            """() => [...document.querySelectorAll('button[aria-pressed] img')]
+                 .filter(i => !i.complete || i.naturalWidth === 0).map(i => i.src)"""
+        )
+        check("every thumbnail image actually loads", not missing, "; ".join(missing[:3]))
+        check(
+            "the thumbnail is an image of a real render",
+            page.locator('img[src*="/themes/engineeringresumes.png"]').count() == 1,
+        )
+        check(
+            "the current template is the one marked selected",
+            page.locator('button[aria-pressed="true"][title*="Default -"]').count() == 1,
+        )
+
+        # Picking a different one must actually change what gets rendered.
+        page.locator('button[title*="Harvard"]').click()
+        page.wait_for_timeout(150)
+        check(
+            "picking a thumbnail selects it",
+            page.locator('button[aria-pressed="true"][title*="Harvard"]').count() == 1,
+        )
+        page.locator('button[title*="Default -"]').click()
+        page.wait_for_timeout(150)
 
         rendered = json.dumps(sent.get("tailored", {}))
         check("the PDF is rendered from the EDITED document", "Hand edited bullet text" in rendered)

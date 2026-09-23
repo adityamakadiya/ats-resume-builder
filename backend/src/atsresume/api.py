@@ -70,7 +70,12 @@ app.add_middleware(
     # Response headers are invisible to cross-origin JavaScript unless they are
     # named here. Without this the browser downloads the PDF as "resume.pdf" and
     # silently drops the render warnings — the endpoint looks like it works.
-    expose_headers=["Content-Disposition", "X-Render-Warnings"],
+    expose_headers=[
+        "Content-Disposition",
+        "X-Render-Warnings",
+        "X-Render-Pages",
+        "X-Render-Fitted",
+    ],
 )
 
 
@@ -139,6 +144,10 @@ class RenderRequest(BaseModel):
     facts: ResumeFacts
     company: str = ""
     theme: str = Field(default="", description="One of /api/themes; blank uses the default")
+    fit_one_page: bool = Field(
+        default=True,
+        description="Tighten spacing, then type, to reach one page. Never cuts content.",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -442,10 +451,13 @@ async def render(request: RenderRequest) -> Response:
         request.facts,
         request.company,
         request.theme or None,
+        request.fit_one_page,
     )
     headers = {
         "Content-Disposition": f'attachment; filename="{result.filename}"',
         "X-Render-Warnings": " | ".join(result.warnings) if result.warnings else "",
+        "X-Render-Pages": str(result.pages),
+        "X-Render-Fitted": "1" if result.fitted else "0",
     }
     return Response(content=result.pdf, media_type="application/pdf", headers=headers)
 

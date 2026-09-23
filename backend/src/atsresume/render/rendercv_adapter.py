@@ -28,6 +28,7 @@ import yaml
 
 from ..config import get_settings
 from ..models import ResumeFacts, TailoredResume
+from .density import LADDER, TIGHTEST, excess_lines, measure, rung_for
 
 logger = logging.getLogger(__name__)
 
@@ -183,11 +184,16 @@ def _markdown_safe(text: str) -> str:
 # with an extractable text layer and no word broken across a line. A theme that
 # cannot pass that is not offered, however good it looks.
 THEMES: dict[str, str] = {
-    "engineeringresumes": "Engineering resumes - dense, serif, the default",
-    "classic": "Classic - roomier, serif",
-    "engineeringclassic": "Engineering classic - ruled section headings",
-    "sb2nov": "sb2nov - compact sans",
-    "moderncv": "Modern CV - the LaTeX moderncv look",
+    # "Name - description". The name is what fits under a thumbnail, so it has
+    # to be short and it has to be distinct: two templates that both truncate
+    # to "Engineering..." are two templates you cannot tell apart. Upstream
+    # names are kept as the keys and dropped from the labels, because "sb2nov"
+    # tells a person looking for a job precisely nothing.
+    "engineeringresumes": "Default - dense serif, used unless you pick another",
+    "classic": "Classic - roomier serif",
+    "engineeringclassic": "Ruled - engineering, with ruled headings",
+    "sb2nov": "Compact - tight sans",
+    "moderncv": "Modern - the LaTeX moderncv look",
     "ember": "Ember - warm accent headings",
     "harvard": "Harvard - plain and conservative",
     "ink": "Ink - heavier type",
@@ -308,6 +314,47 @@ class RenderResult:
     pdf: bytes
     filename: str
     warnings: list[str] = field(default_factory=list)
+    pages: int = 1
+    #: Which rung of the density ladder produced this. 0 is the roomiest.
+    density: int = 0
+    #: True when the resume was asked to fit one page and does.
+    fitted: bool = True
+
+
+def _render_once(document: dict, timeout_s: float) -> bytes:
+    """One rendercv invocation. Raises RenderError with something actionable."""
+    workdir = Path(tempfile.mkdtemp(prefix="atsresume-render-"))
+    try:
+        source = workdir / "cv.yaml"
+        source.write_text(
+            yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
+
+        binary = Path(__import__("sys").executable).parent / "rendercv"
+        command = [str(binary) if binary.exists() else "rendercv", "render", str(source)]
+
+        try:
+            proc = subprocess.run(
+                command, cwd=workdir, capture_output=True, text=True, timeout=timeout_s
+            )
+        except FileNotFoundError as exc:
+            raise RenderError(
+                "rendercv is not installed in this environment. Run: pip install 'rendercv[full]'"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RenderError("Rendering timed out.") from exc
+
+        output = workdir / "rendercv_output"
+        pdfs = sorted(output.glob("*.pdf")) if output.exists() else []
+
+        if proc.returncode != 0 or not pdfs:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            logger.error("rendercv failed: %s", detail[:2000])
+            raise RenderError(_explain_render_failure(detail))
+
+        return pdfs[0].read_bytes()
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def render_pdf(
@@ -315,6 +362,7 @@ def render_pdf(
     facts: ResumeFacts,
     company: str = "",
     theme: str | None = None,
+    fit_one_page: bool = True,
 ) -> RenderResult:
     settings = get_settings()
     warnings: list[str] = []
@@ -335,49 +383,50 @@ def render_pdf(
             f"'{chosen}' is not an available theme. Choose one of: {', '.join(THEMES)}."
         )
 
-    document = {
-        "cv": build_cv_dict(tailored, facts),
-        "design": {"theme": chosen},
-        "settings": {"render_command": {"dont_generate_png": True, "dont_generate_markdown": True}},
+    cv = build_cv_dict(tailored, facts)
+    render_settings = {
+        "render_command": {"dont_generate_png": True, "dont_generate_markdown": True}
     }
 
-    workdir = Path(tempfile.mkdtemp(prefix="atsresume-render-"))
-    try:
-        source = workdir / "cv.yaml"
-        source.write_text(
-            yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    def render_at(rung: int) -> bytes:
+        return _render_once(
+            {
+                "cv": cv,
+                "design": LADDER[rung].design(chosen),
+                "settings": render_settings,
+            },
+            settings.render_timeout_s,
         )
 
-        binary = Path(__import__("sys").executable).parent / "rendercv"
-        command = [str(binary) if binary.exists() else "rendercv", "render", str(source)]
+    # Rung 0 first, always. Most resumes fit there, and the ones that do should
+    # be set roomily rather than compressed pre-emptively into space they do
+    # not need.
+    rung = 0
+    pdf_bytes = render_at(rung)
+    pages, extent = measure(pdf_bytes)
 
-        try:
-            proc = subprocess.run(
-                command,
-                cwd=workdir,
-                capture_output=True,
-                text=True,
-                timeout=settings.render_timeout_s,
+    if fit_one_page and pages > 1:
+        # One measured render tells us how much overflow there is, so the right
+        # rung can be chosen directly instead of searched for.
+        rung = rung_for(extent)
+        pdf_bytes = render_at(rung)
+        pages, extent = measure(pdf_bytes)
+
+        # The measurement is of text extent and the renderer also places
+        # trailing space, so allow one corrective step before giving up.
+        while pages > 1 and rung < TIGHTEST:
+            rung += 1
+            pdf_bytes = render_at(rung)
+            pages, _ = measure(pdf_bytes)
+
+        if pages > 1:
+            lines = excess_lines(pdf_bytes, extent)
+            warnings.append(
+                f"This still runs to {pages} pages at the tightest spacing that stays readable "
+                f"({LADDER[TIGHTEST].body_pt:g}pt). Nothing was deleted to make it fit. "
+                f"Cutting about {lines} line{'s' if lines != 1 else ''} of bullets, weakest first "
+                "and from your oldest roles, brings it onto one page."
             )
-        except FileNotFoundError as exc:
-            raise RenderError(
-                "rendercv is not installed in this environment. Run: pip install 'rendercv[full]'"
-            ) from exc
-        except subprocess.TimeoutExpired as exc:
-            raise RenderError("Rendering timed out.") from exc
-
-        pdfs = sorted((workdir / "rendercv_output").glob("*.pdf")) if (
-            workdir / "rendercv_output"
-        ).exists() else []
-
-        if proc.returncode != 0 or not pdfs:
-            detail = (proc.stderr or proc.stdout or "").strip()
-            logger.error("rendercv failed: %s", detail[:2000])
-            raise RenderError(_explain_render_failure(detail))
-
-        pdf_bytes = pdfs[0].read_bytes()
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
 
     stem = re.sub(r"[^A-Za-z0-9]+", "-", facts.contact.name).strip("-") or "Resume"
     slug = re.sub(r"[^A-Za-z0-9]+", "-", company).strip("-")
@@ -385,7 +434,14 @@ def render_pdf(
         slug = ""
     filename = "-".join(p for p in (stem, "Resume", slug) if p) + ".pdf"
 
-    return RenderResult(pdf=pdf_bytes, filename=filename, warnings=warnings)
+    return RenderResult(
+        pdf=pdf_bytes,
+        filename=filename,
+        warnings=warnings,
+        pages=pages,
+        density=rung,
+        fitted=pages <= 1,
+    )
 
 
 def _explain_render_failure(detail: str) -> str:

@@ -54,6 +54,7 @@ export function Rail({
   strategy,
   editedCount,
   rewriteNotes,
+  children,
 }: {
   report: AtsReport;
   truth: TruthReport;
@@ -61,6 +62,8 @@ export function Rail({
   strategy: Strategy;
   editedCount: number;
   rewriteNotes: string[];
+  /** Slotted between the verdict and the folds: see the note below. */
+  children?: React.ReactNode;
 }) {
   const tone =
     report.overall >= 75 ? "text-verified" : report.overall >= 55 ? "text-ink" : "text-stamp";
@@ -90,25 +93,30 @@ export function Rail({
         {truth.passed ? (
           <p className="text-[0.8125rem] text-verified">
             <span className="font-mono text-[0.625rem] uppercase tracking-wider">Verified</span>
-            <span className="block text-ink-muted">
-              Every generated line traces to your resume.
-            </span>
+            <span className="block text-ink-muted">Every line traces to your resume.</span>
           </p>
         ) : (
           <p className="text-[0.8125rem] text-stamp">
             <span className="font-mono text-[0.625rem] uppercase tracking-wider">Unverified</span>
             <span className="block">
-              {truth.error_count} generated line{truth.error_count === 1 ? "" : "s"} could not be
-              traced.
+              {truth.error_count} line{truth.error_count === 1 ? "" : "s"} could not be traced.
             </span>
           </p>
         )}
         {editedCount > 0 && (
           <p className="mt-1.5 text-[0.8125rem] text-caution">
-            {editedCount} line{editedCount === 1 ? "" : "s"} edited by you, not checked.
+            {editedCount} edited by you, not checked.
           </p>
         )}
       </div>
+
+      {/* The score and the verification stamp are what you glance at, so they
+          stay at the top of the column. Everything that is acted on rather
+          than read — the suggested terms, the template — sits directly under
+          them, and the long-form judgement stays folded below. Stacking those
+          controls above the score instead buried the one number the page is
+          for under nine thumbnails. */}
+      {children}
 
       {!truth.passed && (
         <Fold title="What failed">

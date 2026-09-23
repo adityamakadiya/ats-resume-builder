@@ -21,6 +21,7 @@ import {
 import { ResumeEditor, useResumeEditor } from "./_components/editor";
 import { Rail } from "./_components/rail";
 import { Suggestions } from "./_components/suggestions";
+import { TemplatePicker } from "./_components/template-picker";
 import { STEPS, Stepper, useElapsed, type StepState } from "./_components/steps";
 
 type Phase = "intake" | "working" | "editing";
@@ -67,6 +68,15 @@ export default function Home() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   // The score is computed rather than generated, so it can follow every edit.
   const [liveReport, setLiveReport] = useState<AtsReport | null>(null);
+  // What the last render came out at, so "one page" is something the UI can
+  // state rather than something you find out by opening the file. It holds the
+  // document it described; the editor replaces that object on every edit, so
+  // identity alone says whether the count still applies.
+  const [lastRender, setLastRender] = useState<{
+    pages: number;
+    fitted: boolean;
+    doc: unknown;
+  } | null>(null);
 
   // The editor owns the document from the moment the rewrite lands, and the
   // renderer reads from it, so the PDF is always exactly what is on screen.
@@ -216,6 +226,8 @@ export default function Home() {
     setError(null);
     try {
       const pdf = await renderPdf(editor.doc, parsed.facts, result.job.company, theme);
+      setLastRender({ pages: pdf.pages, fitted: pdf.fitted, doc: editor.doc });
+      if (pdf.warnings.length > 0) setError({ message: pdf.warnings.join(" ") });
       const url = URL.createObjectURL(pdf.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -269,20 +281,10 @@ export default function Home() {
                   ))}
                 </select>
               )}
-              {Object.keys(themes).length > 0 && (
-                <select
-                  aria-label="PDF template"
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value)}
-                  title="Every template here is checked to render single column with an extractable text layer"
-                  className="max-w-[9rem] truncate border border-rule-strong bg-paper-raised px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-ink-muted outline-none hover:border-ink focus:border-ink"
-                >
-                  {Object.entries(themes).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+              {lastRender?.doc === editor.doc && (
+                <span className="font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint">
+                  {lastRender.fitted ? "One page" : `${lastRender.pages} pages`}
+                </span>
               )}
               <button
                 onClick={() => setPhase("intake")}
@@ -316,11 +318,6 @@ export default function Home() {
             />
           </div>
           <div className="rise space-y-4 lg:sticky lg:top-16 lg:self-start">
-            <Suggestions
-              report={liveReport ?? result.report}
-              doc={editor.doc}
-              onAddSkill={editor.addSkill}
-            />
             <Rail
               report={liveReport ?? result.report}
               truth={result.truth}
@@ -328,7 +325,14 @@ export default function Home() {
               strategy={result.strategy}
               editedCount={editor.editedKeys.size}
               rewriteNotes={editor.doc.rewrite_notes}
-            />
+            >
+              <Suggestions
+                report={liveReport ?? result.report}
+                doc={editor.doc}
+                onAddSkill={editor.addSkill}
+              />
+              <TemplatePicker themes={themes} value={theme} onChange={setTheme} />
+            </Rail>
           </div>
         </div>
       </main>
@@ -345,15 +349,12 @@ export default function Home() {
           <br />
           <em className="pr-[0.12em] text-stamp">inventing</em> anything.
         </h1>
-        <p className="mt-4 max-w-prose text-[0.9375rem] leading-relaxed text-ink-muted">
-          Your resume is the only source of material. Edit the result in place, then export.
-        </p>
       </header>
 
       {backendUp === false && (
         <p className="rise mt-6 border-l-2 border-stamp bg-stamp-soft px-3 py-2.5 text-[0.8125rem] text-stamp">
-          Backend not reachable. Start it with{" "}
-          <span className="font-mono">uvicorn atsresume.api:app --port 8000</span>.
+          Backend not reachable. Start it:{" "}
+          <span className="font-mono">uvicorn atsresume.api:app --port 8000</span>
         </p>
       )}
 
@@ -361,7 +362,7 @@ export default function Home() {
         <fieldset disabled={phase === "working"} className="space-y-6 disabled:opacity-60">
           <div>
             <label htmlFor="resume" className="label">
-              01 — Resume
+              Resume
             </label>
             <input
               id="resume"
@@ -383,7 +384,7 @@ export default function Home() {
 
           <div>
             <label htmlFor="jd" className="label">
-              02 — Posting
+              Posting
             </label>
             <input
               id="jd"
@@ -398,14 +399,14 @@ export default function Home() {
               onClick={() => setShowPaste((v) => !v)}
               className="mt-1.5 font-mono text-[0.625rem] uppercase tracking-wider text-ink-faint underline underline-offset-4 hover:text-stamp"
             >
-              {showPaste ? "Hide" : "Or paste the posting instead"}
+              {showPaste ? "Hide" : "Paste it instead"}
             </button>
             {showPaste && (
               <textarea
                 value={jdText}
                 onChange={(e) => setJdText(e.target.value)}
                 rows={7}
-                placeholder="Paste the full posting."
+                placeholder="Paste the posting."
                 className="mt-2 w-full resize-y border border-rule bg-paper-raised px-3 py-2 font-mono text-[0.8125rem] placeholder:text-ink-faint focus:border-ink focus:outline-none"
               />
             )}
