@@ -218,3 +218,30 @@ def sample_tailored() -> TailoredResume:
     from sample import tailored as _tailored
 
     return _tailored()
+
+
+# --------------------------------------------------------------------------- #
+# Network                                                                      #
+# --------------------------------------------------------------------------- #
+#
+# The JD fetcher resolves a hostname before it connects, so that it can refuse
+# anything that is not on the public internet. That made DNS a dependency of a
+# code path the suite exercises constantly, and a suite that quietly depends on
+# a resolver is a suite that fails on a train.
+#
+# This lives here rather than in test_jd.py because the dependency is not local
+# to that file: anything that reaches fetch_jd inherits it, and the next test
+# module to do so should not have to rediscover why it hangs.
+
+_TEST_PUBLIC_IP = "93.184.216.34"
+
+
+@pytest.fixture(autouse=True)
+def _dns_is_stubbed(monkeypatch):
+    """Every hostname resolves to one public address unless a test says otherwise."""
+    import socket as _socket
+
+    def resolver(host, port, *args, **kwargs):
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (_TEST_PUBLIC_IP, port or 0))]
+
+    monkeypatch.setattr(_socket, "getaddrinfo", resolver)

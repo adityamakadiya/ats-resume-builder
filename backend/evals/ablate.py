@@ -399,6 +399,19 @@ def recommendation(base: VariantSummary, ablated: VariantSummary) -> tuple[str, 
     return verdict, why
 
 
+def recommendations_of(summaries: list[VariantSummary]) -> list[dict[str, str]]:
+    base = next((s for s in summaries if s.variant == "full"), None)
+    if base is None:
+        return []
+    out = []
+    for summary in summaries:
+        if summary.variant == "full":
+            continue
+        verdict, why = recommendation(base, summary)
+        out.append({"variant": summary.variant, "verdict": verdict, "reason": why})
+    return out
+
+
 def render(cells: list[Cell], variants: list[str]) -> list[VariantSummary]:
     summaries = [summarise(cells, v) for v in variants]
     base = next((s for s in summaries if s.variant == "full"), None)
@@ -607,13 +620,7 @@ def main() -> int:
         "score_tolerance": SCORE_TOLERANCE,
         "cells": [asdict(c) for c in cells],
         "summaries": [asdict(s) for s in summaries],
-        "recommendations": [
-            dict(zip(("verdict", "reason"), recommendation(base, s)))
-            for base in [next((x for x in summaries if x.variant == "full"), None)]
-            if base is not None
-            for s in summaries
-            if s.variant != "full"
-        ],
+        "recommendations": recommendations_of(summaries),
         "total_cost_usd": round(sum(c.cost_usd for c in cells), 4),
     }
     Path(args.out).write_text(json.dumps(payload, indent=2))

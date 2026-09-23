@@ -442,15 +442,18 @@
 
 .rz--modern .rz-cols {
   display: grid;
-  grid-template-columns: 30% 1fr;
+  /* Wide enough that an email address fits without being broken mid-word,
+     narrow enough that the main column still reads as the main column. */
+  grid-template-columns: 33% 1fr;
   min-height: var(--page-h);
   align-items: stretch;
 }
 
 .rz--modern .rz-aside {
-  padding: var(--page-pad) calc(var(--page-pad) * 0.72);
+  padding: var(--page-pad) calc(var(--page-pad) * 0.58);
   background: var(--panel);
   border-right: 0.6pt solid var(--rule);
+  min-width: 0;
 }
 
 .rz--modern .rz-main {
@@ -481,16 +484,42 @@
 
 .rz--modern .rz-contact--stacked > li {
   margin-top: var(--gap-line);
-  overflow-wrap: anywhere;
+  /* A long address wraps rather than widening the column, but only when it
+     genuinely cannot fit, so it is not chopped mid-word by default. */
+  overflow-wrap: break-word;
 }
 
-.rz--modern .rz-contact--stacked > li + li::before {
+.rz--modern .rz-contact--stacked > li:not(:last-child)::after {
   content: none;
 }
 
 .rz--modern .rz-aside .rz-h2 {
   border-bottom-color: var(--accent);
   color: var(--accent);
+}
+
+/* In a narrow column a right-aligned date fights the wrapped title it sits
+   beside, so the sidebar stacks what the main column sets on one line. */
+.rz--modern .rz-aside .rz-entry-line {
+  display: block;
+}
+
+.rz--modern .rz-aside .rz-dates {
+  display: block;
+  margin-top: calc(var(--gap-line) * 0.5);
+  white-space: normal;
+}
+
+.rz--modern .rz-aside .rz-skills--stacked > dt {
+  font-size: var(--t-small);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-top: calc(var(--gap-head) * 1.6);
+}
+
+.rz--modern .rz-aside .rz-plain {
+  padding-left: 0.9em;
+  font-size: var(--t-small);
 }
 
 .rz--modern .rz-main .rz-h2 {

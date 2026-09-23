@@ -1,0 +1,49 @@
+{
+  "name": "@ats/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure-TypeScript brain: schemas, vocabulary, ATS scoring v2, sanitisation, JSON Pointer patches. Zero I/O, zero React, zero network.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./src/schema/index.ts",
+      "default": "./src/schema/index.ts"
+    },
+    "./scoring": {
+      "types": "./src/scoring/index.ts",
+      "default": "./src/scoring/index.ts"
+    },
+    "./sanitize": {
+      "types": "./src/sanitize/index.ts",
+      "default": "./src/sanitize/index.ts"
+    },
+    "./patch": {
+      "types": "./src/patch/index.ts",
+      "default": "./src/patch/index.ts"
+    },
+    "./vocabulary": {
+      "types": "./src/vocabulary/index.ts",
+      "default": "./src/vocabulary/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}
