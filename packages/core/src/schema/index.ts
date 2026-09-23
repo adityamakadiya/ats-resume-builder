@@ -495,5 +495,5 @@ export type StyleProfile = z.infer<typeof StyleProfileSchema>;
 export type SourceKind = (typeof SourceKindValues)[number];
 export type SourceDocument = z.infer<typeof SourceDocumentSchema>;
 
-export { toJsonSchema, strictSchema } from './json-schema.js';
-export type { JsonSchema } from './json-schema.js';
+export { toJsonSchema, strictSchema } from './json-schema';
+export type { JsonSchema } from './json-schema';

@@ -8,9 +8,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { TailoredResumeSchema, type TailoredResume } from '../src/schema/index.js';
-import { REPLACEMENTS, cleanText, containsTells, sanitize } from '../src/sanitize/index.js';
-import { deepClone } from '../src/patch/index.js';
+import { TailoredResumeSchema, type TailoredResume } from '../src/schema/index';
+import { REPLACEMENTS, cleanText, containsTells, sanitize } from '../src/sanitize/index';
+import { deepClone } from '../src/patch/index';
 
 describe('cleanText', () => {
   it.each([

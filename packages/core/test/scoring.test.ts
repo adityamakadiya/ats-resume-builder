@@ -16,8 +16,8 @@ import {
   JobSpecSchema,
   ResumeFactsSchema,
   TailoredResumeSchema,
-} from '../src/schema/index.js';
-import { computeAtsReport, computeBreakdown } from '../src/scoring/index.js';
+} from '../src/schema/index';
+import { computeAtsReport, computeBreakdown } from '../src/scoring/index';
 
 const job = JobSpecSchema.parse(fixture.job);
 const facts = ResumeFactsSchema.parse(fixture.facts);

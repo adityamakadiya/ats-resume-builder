@@ -32,10 +32,10 @@ import {
   escapeRegExp,
   normalise,
   termsPresent,
-} from '../src/vocabulary/index.js';
-import { contains, covers, stem } from '../src/scoring/text.js';
-import { digitsOf, metrics } from '../src/scoring/metrics.js';
-import { pyRound } from '../src/util/py-round.js';
+} from '../src/vocabulary/index';
+import { contains, covers, stem } from '../src/scoring/text';
+import { digitsOf, metrics } from '../src/scoring/metrics';
+import { pyRound } from '../src/util/py-round';
 
 /* ------------------------------------------------------------------ */
 /* normalise                                                           */

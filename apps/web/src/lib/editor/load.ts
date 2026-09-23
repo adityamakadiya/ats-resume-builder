@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ResumeDoc } from "@ats/templates";
 import { getServerClient } from "@/lib/supabase/server";
 import { tailoredOf } from "./doc";
+import { factsToDocument } from "./ingest";
 import { sampleRun, type EditorRun } from "./fixtures";
 
 export type LoadedRun = {
@@ -118,6 +119,66 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
+
+/**
+ * Build the candidate's own document from the upload behind this resume.
+ *
+ * Returns null when there is nothing to build from, which is a legitimate
+ * state: a resume started from scratch, or one whose upload could not be
+ * parsed. The caller falls back to the sample and says so.
+ */
+async function hydrateFromDocument(
+  db: SupabaseClient,
+  resume: Record<string, unknown>,
+  resumeId: string,
+  documentId?: string
+): Promise<Partial<EditorRun> | null> {
+  const sourceId =
+    typeof resume.source_document_id === "string"
+      ? resume.source_document_id
+      : documentId ?? null;
+  if (!sourceId) return null;
+
+  const { data } = await db
+    .from("documents")
+    .select("facts_json")
+    .eq("id", sourceId)
+    .maybeSingle();
+
+  const factsJson = record(data)?.facts_json;
+  if (!factsJson || typeof factsJson !== "object") return null;
+
+  const facts = factsJson as ResumeFacts;
+  const doc = factsToDocument(facts);
+
+  // A document with no name and no history is an extraction that failed in a
+  // way the service did not report. Better the sample, which is labelled.
+  if (!facts.contact?.name && (facts.experience ?? []).length === 0) return null;
+
+  /*
+    Persist it. Best effort: a failed write costs a re-derivation on the next
+    load, which is cheap and silent, whereas failing the page over it would
+    hide the user's resume behind an error they cannot act on.
+  */
+  let versionId = `local-${resumeId}`;
+  const { data: inserted, error } = await db
+    .from("resume_versions")
+    .insert({
+      resume_id: resumeId,
+      user_id: resume.user_id ?? undefined,
+      doc_json: doc,
+      created_by: "import",
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error) console.warn("[editor] could not persist the first version:", error.message);
+  const insertedId = record(inserted)?.id;
+  if (typeof insertedId === "string") versionId = insertedId;
+
+  return { versionId, saved: !error, doc, facts };
+}
+
 export async function loadRun(resumeId: string, documentId?: string): Promise<LoadedRun> {
   const fallback: LoadedRun = { run: sampleRun(resumeId), sourceFile: null };
 
@@ -148,7 +209,7 @@ export async function loadRun(resumeId: string, documentId?: string): Promise<Lo
 
   const { data: resumeData, error } = await db
     .from("resumes")
-    .select("id, title, template_id, current_version_id, job_id")
+    .select("id, title, template_id, current_version_id, job_id, source_document_id")
     .eq("id", resumeId)
     .maybeSingle();
 
@@ -166,7 +227,25 @@ export async function loadRun(resumeId: string, documentId?: string): Promise<Lo
   const shell: EditorRun = { ...sample, title, templateId };
 
   const versionId = typeof resume.current_version_id === "string" ? resume.current_version_id : null;
-  if (!versionId) return { run: shell, sourceFile };
+
+  if (!versionId) {
+    /*
+      No version yet, which is every resume at the moment it is created:
+      /api/resumes writes the row before anything has been written into it.
+
+      If an upload backs this resume, the honest first draft is the upload
+      itself. Not a sample, and not a model's idea of it: the candidate's own
+      bullets, in their own words, carrying the fact ids that let every later
+      rewrite be traced. Showing a stranger's CV here was the single most
+      misleading thing this screen did.
+
+      The version is written back so the next load is a plain read and the
+      user's first edit has something to diff against.
+    */
+    const hydrated = await hydrateFromDocument(db, resume, resumeId, documentId);
+    if (hydrated) return { run: { ...shell, ...hydrated }, sourceFile };
+    return { run: shell, sourceFile };
+  }
 
   const { data: versionData } = await db
     .from("resume_versions")

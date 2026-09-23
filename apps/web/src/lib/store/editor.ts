@@ -533,8 +533,28 @@ export const selectCanUndo = (s: EditorStore) => s.history.past.length > 0;
 export const selectCanRedo = (s: EditorStore) => s.history.future.length > 0;
 export const selectEditedCount = (s: EditorStore) => s.editedKeys.size;
 
-export function selectOpenViolations(s: EditorStore): Array<{ index: number; violation: TruthViolation }> {
-  return s.truth.violations
+/**
+ * Violations the user has not dismissed, paired with their original index.
+ *
+ * NOT a store selector, and the distinction is load bearing. This builds a
+ * new array of new objects on every call, and Zustand 5 compares selector
+ * results with Object.is through useSyncExternalStore. Passed straight to
+ * useEditorStore it returns a different reference every render, React
+ * re-renders because the value changed, the selector runs again, and the
+ * component loops until React gives up with "Maximum update depth exceeded".
+ * It took the whole editor down behind the error boundary.
+ *
+ * `useShallow` would not save it either: shallow equality compares the array
+ * one level deep, and the elements are freshly built objects.
+ *
+ * So the derivation happens in the component, memoised on the two stable
+ * slices it reads. Select state; derive in render.
+ */
+export function openViolations(
+  violations: readonly TruthViolation[],
+  dropped: readonly number[]
+): Array<{ index: number; violation: TruthViolation }> {
+  return violations
     .map((violation, index) => ({ violation, index }))
-    .filter(({ index }) => !s.droppedViolations.includes(index));
+    .filter(({ index }) => !dropped.includes(index));
 }

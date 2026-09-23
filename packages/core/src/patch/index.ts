@@ -11,7 +11,7 @@
  * legal for `add` only.
  */
 
-import type { TailoredResume } from '../schema/index.js';
+import type { TailoredResume } from '../schema/index';
 
 export type OpKind = 'replace' | 'add' | 'remove';
 

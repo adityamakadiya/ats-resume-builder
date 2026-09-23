@@ -23,7 +23,7 @@ import {
   allTerms,
   toJsonSchema,
   type JobSpec,
-} from '../src/schema/index.js';
+} from '../src/schema/index';
 
 const ALL = {
   ResumeFacts: ResumeFactsSchema,

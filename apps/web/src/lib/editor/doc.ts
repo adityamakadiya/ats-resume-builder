@@ -23,7 +23,8 @@ import type { ResumeDoc } from "@ats/templates";
 
 /** The scoring and guard layers want the document without contact details. */
 export function tailoredOf(doc: ResumeDoc): TailoredResume {
-  const { contact: _contact, ...tailored } = doc;
+  const { contact, ...tailored } = doc;
+  void contact;
   return tailored;
 }
 

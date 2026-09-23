@@ -6,8 +6,8 @@
  * under test, not incidental plumbing. `_stem` and `_STOPWORDS` come with them.
  */
 
-import { canonical, escapeRegExp, normalise } from '../vocabulary/index.js';
-import type { JobSpec, ResumeFacts, TailoredResume } from '../schema/index.js';
+import { canonical, escapeRegExp, normalise } from '../vocabulary/index';
+import type { JobSpec, ResumeFacts, TailoredResume } from '../schema/index';
 
 /**
  * Whole-word containment.

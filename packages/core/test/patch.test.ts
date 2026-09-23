@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TailoredResumeSchema, type TailoredResume } from '../src/schema/index.js';
+import { TailoredResumeSchema, type TailoredResume } from '../src/schema/index';
 import {
   applyPatch,
   diffDocs,
@@ -11,7 +11,7 @@ import {
   validateOps,
   type Op,
   deepClone,
-} from '../src/patch/index.js';
+} from '../src/patch/index';
 
 function doc(): TailoredResume {
   return TailoredResumeSchema.parse({

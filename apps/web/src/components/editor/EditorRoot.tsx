@@ -19,14 +19,13 @@
  * fixing a typo on a phone twenty minutes before a deadline is a real person.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import type { TruthViolation } from "@ats/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorRun } from "@/lib/editor/fixtures";
 import { countLines } from "@/lib/editor/doc";
 import {
   selectCanRedo,
   selectCanUndo,
-  selectOpenViolations,
+  openViolations,
   useEditorStore,
 } from "@/lib/store/editor";
 import { ChatPanel } from "./ChatPanel";
@@ -56,6 +55,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
 
   const init = useEditorStore((s) => s.init);
   const resumeId = useEditorStore((s) => s.resumeId);
+  const title = useEditorStore((s) => s.title);
   const doc = useEditorStore((s) => s.doc);
   const report = useEditorStore((s) => s.report);
   const breakdown = useEditorStore((s) => s.breakdown);
@@ -67,15 +67,30 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const saveState = useEditorStore((s) => s.saveState);
   const lastError = useEditorStore((s) => s.lastError);
   const unverifiableOpen = useEditorStore((s) => s.unverifiableOpen);
-  const violations = useEditorStore(selectOpenViolations);
+  const truthViolations = useEditorStore((s) => s.truth.violations);
+  const droppedViolations = useEditorStore((s) => s.droppedViolations);
+  // Derived in render, not in the selector. See openViolations.
+  const violations = useMemo(
+    () => openViolations(truthViolations, droppedViolations),
+    [truthViolations, droppedViolations]
+  );
   const canUndo = useEditorStore(selectCanUndo);
   const canRedo = useEditorStore(selectCanRedo);
 
-  // The run is server data. Loading it into the store is the one moment the
-  // store is allowed to be replaced wholesale rather than patched.
+  /*
+    The run is server data, and loading it is the one moment the store is
+    replaced wholesale rather than patched. It is keyed on the document it
+    describes rather than on object identity: a router refresh hands down a
+    structurally identical `run` as a new object, and re-running init on that
+    would silently throw away everything the user had typed.
+  */
+  const loaded = useRef<string | null>(null);
+  const runKey = `${run.resumeId}:${run.versionId}`;
   useEffect(() => {
+    if (loaded.current === runKey) return;
+    loaded.current = runKey;
     init(run);
-  }, [init, run]);
+  }, [init, run, runKey]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -90,7 +105,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const ask = useCallback((question: string, _violation: TruthViolation) => {
+  const ask = useCallback((question: string) => {
     useEditorStore.getState().closeUnverifiable();
     setPrefill({ text: question, nonce: Date.now() });
   }, []);
@@ -101,7 +116,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   return (
     <div className="flex h-[calc(100dvh-1px)] min-h-0 flex-col">
       <Toolbar
-        title={useEditorStore.getState().title}
+        title={title}
         templateId={templateId}
         canUndo={canUndo}
         canRedo={canRedo}

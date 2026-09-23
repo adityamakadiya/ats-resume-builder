@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { validateResumeFile } from "@/components/upload/validate";
+import { IngestError, factRows, parseResumeFile } from "@/lib/editor/ingest";
 
 const BUCKET = "resumes";
 
@@ -131,9 +132,76 @@ export async function POST(request: Request) {
     );
   }
 
+  /*
+    Read the file now, while the bytes are in hand.
+
+    This used to be deferred on the grounds that intake should only record
+    that a file exists. The cost of that was the editor opening on a sample
+    document: the user uploads their resume, picks a template, and is shown
+    somebody else's CV. Parsing here is what makes the next screen theirs.
+
+    Parsing is allowed to fail without failing the upload. The file is stored
+    and the row is written; a document service that is down is an operator
+    problem, not a reason to make someone upload again. The response says
+    which happened, and the editor reads `parsed` to decide whether it is
+    showing a real document or asking for one.
+  */
+  let parsed: Awaited<ReturnType<typeof parseResumeFile>> | null = null;
+  let parseProblem: { reason: string; remedy: string } | null = null;
+
+  try {
+    parsed = await parseResumeFile(file, request.signal);
+  } catch (error) {
+    if (error instanceof IngestError) {
+      parseProblem = { reason: error.message, remedy: error.remedy };
+    } else {
+      parseProblem = {
+        reason: "The resume was stored but could not be read.",
+        remedy: "Open it in the editor and paste the text, or try uploading again.",
+      };
+    }
+    console.warn("[upload] parse failed:", parseProblem.reason);
+  }
+
+  if (parsed) {
+    // Text first. The truth guard reads documents.raw_text, so this column
+    // is what every later verification is checked against.
+    const { error: updateError } = await supabase
+      .from("documents")
+      .update({
+        raw_text: parsed.rawText,
+        page_count: parsed.pageCount,
+        style_json: parsed.style,
+        notes: parsed.notes,
+        // The nested extraction, for rebuilding the candidate's own
+        // document. The flattened facts rows below cannot do that
+        // without losing which bullets belong to which role.
+        facts_json: parsed.facts,
+      })
+      .eq("id", documentId);
+
+    if (updateError) {
+      console.warn("[upload] could not store parsed text:", updateError.message);
+    }
+
+    // The ledger. origin 'document' marks these as things the uploaded file
+    // actually says, which is the only kind of fact a rewrite may cite.
+    const rows = factRows(parsed.facts, user.id, documentId);
+    if (rows.length > 0) {
+      const { error: factsError } = await supabase.from("facts").insert(rows);
+      if (factsError) {
+        console.warn("[upload] could not store facts:", factsError.message);
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     documentId: insert.data.id,
     filename: file.name,
+    parsed: Boolean(parsed),
+    pageCount: parsed?.pageCount ?? 0,
+    notes: parsed?.notes ?? [],
+    parseProblem,
   });
 }

@@ -8,9 +8,9 @@
  * cannot be regression-tested or explained to the candidate.
  */
 
-export * from './schema/index.js';
-export * from './vocabulary/index.js';
-export * from './scoring/index.js';
-export * from './sanitize/index.js';
-export * from './patch/index.js';
+export * from './schema/index';
+export * from './vocabulary/index';
+export * from './scoring/index';
+export * from './sanitize/index';
+export * from './patch/index';
 // `pyRound` is re-exported through ./scoring.

@@ -20,7 +20,7 @@
  * is a bug. A new document is returned; the input is untouched.
  */
 
-import type { TailoredBullet, TailoredResume } from '../schema/index.js';
+import type { TailoredBullet, TailoredResume } from '../schema/index';
 
 /** Spaced dash separating clauses; becomes the separator. */
 const SPACED_DASH = /\s*[–—]\s+/g;

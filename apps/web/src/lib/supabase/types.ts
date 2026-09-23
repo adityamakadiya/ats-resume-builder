@@ -82,6 +82,49 @@ export type DocumentRow = {
   user_id: string;
   storage_path: string | null;
   kind: "pdf" | "docx" | "text";
+  /**
+   * What the document service read out of the file.
+   *
+   * Null until it has been parsed, and null forever if parsing failed. This
+   * is the column the truth guard checks every rewritten line against, so a
+   * document with no raw_text cannot be verified against anything and the
+   * editor has to say so rather than report a pass.
+   */
+  raw_text: string | null;
+  page_count: number | null;
+  /** The measured StyleProfile: page box, columns, type ladder, accent. */
+  style_json: unknown | null;
+  /** Reader notes worth showing, such as "this resume is in two columns". */
+  notes: string[] | null;
+  /**
+   * The structured extraction as the model returned it, added in 0008.
+   * Rebuilds the candidate's own document for the editor. Not read by
+   * the truth guard, which uses raw_text and the facts ledger.
+   */
+  facts_json: unknown | null;
+  sha256: string | null;
+  created_at: string;
+};
+
+/**
+ * One row of the provenance ledger.
+ *
+ * `origin` is the field the whole design rests on. 'document' means the
+ * uploaded file says this, so a rewrite may cite it. 'attested' means the
+ * candidate told us in conversation, which is equally usable and separately
+ * auditable. Nothing may be cited that is neither.
+ */
+export type FactRow = {
+  id: string;
+  user_id: string;
+  document_id: string | null;
+  /** The citable id, 'E1.B2' shaped, referenced by every tailored line. */
+  fact_key: string;
+  text: string;
+  origin: "document" | "attested" | "derived";
+  entities_json: unknown | null;
+  evidence_json: unknown | null;
+  supersedes: string | null;
   created_at: string;
 };
 
@@ -98,6 +141,17 @@ export type Database = {
         Row: DocumentRow;
         Insert: Partial<DocumentRow> & { user_id: string; kind: DocumentRow["kind"] };
         Update: Partial<DocumentRow>;
+        Relationships: [];
+      };
+      facts: {
+        Row: FactRow;
+        Insert: Partial<FactRow> & {
+          user_id: string;
+          fact_key: string;
+          text: string;
+          origin: FactRow["origin"];
+        };
+        Update: Partial<FactRow>;
         Relationships: [];
       };
     };

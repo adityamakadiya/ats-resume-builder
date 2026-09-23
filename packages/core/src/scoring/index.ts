@@ -25,11 +25,11 @@ import type {
   JobSpec,
   ResumeFacts,
   TailoredResume,
-} from '../schema/index.js';
-import { Importance } from '../schema/index.js';
-import { escapeRegExp, normalise } from '../vocabulary/index.js';
-import { pyRound } from '../util/py-round.js';
-import { digitsOf, metrics } from './metrics.js';
+} from '../schema/index';
+import { Importance } from '../schema/index';
+import { escapeRegExp, normalise } from '../vocabulary/index';
+import { pyRound } from '../util/py-round';
+import { digitsOf, metrics } from './metrics';
 import {
   contains,
   covers,
@@ -37,7 +37,7 @@ import {
   resumeTextOf,
   scoreExperienceMatch,
   splitWords,
-} from './text.js';
+} from './text';
 
 export const WEIGHTS = {
   keyword_coverage: 0.35,
@@ -558,6 +558,6 @@ function recommendations(
   return out;
 }
 
-export * from './text.js';
-export { metrics, digitsOf } from './metrics.js';
-export { pyRound } from '../util/py-round.js';
+export * from './text';
+export { metrics, digitsOf } from './metrics';
+export { pyRound } from '../util/py-round';

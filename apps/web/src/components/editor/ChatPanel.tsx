@@ -118,10 +118,21 @@ export function ChatPanel({ prefill }: ChatPanelProps) {
   const resumeId = useEditorStore((s) => s.resumeId);
   const baseVersionId = useEditorStore((s) => s.baseVersionId);
 
-  useEffect(() => {
-    if (!prefill) return;
+  /*
+    A question written by the refusal dialog arrives as a prop rather than as
+    a call, so it is folded into the composer during render rather than in an
+    effect. The nonce is what makes "the same question again" a new event; the
+    text alone would be swallowed the second time somebody asked about the
+    same refused line.
+  */
+  const [answeredNonce, setAnsweredNonce] = useState<number | null>(null);
+  if (prefill && prefill.nonce !== answeredNonce) {
+    setAnsweredNonce(prefill.nonce);
     setInput(prefill.text);
-    composerRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (prefill) composerRef.current?.focus();
   }, [prefill]);
 
   useEffect(() => {
