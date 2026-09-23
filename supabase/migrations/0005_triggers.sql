@@ -232,46 +232,38 @@ create trigger facts_retire_superseded
 --   has shifted.
 --
 --   The guard is a state machine, not a uniqueness constraint, because the
---   thing to forbid is a transition: 'proposed' is the only state an update
---   may leave, and it may only go to accepted/declined/superseded. A second
---   accept therefore fails loudly with a distinguishable errcode instead of
---   silently rewriting the decision.
+--   thing to forbid is a transition. 'proposed' is the only state an update
+--   may leave; once a patch is accepted, declined or superseded the row is
+--   FROZEN and any further UPDATE raises. Frozen rather than "may not change
+--   status", because a replayed request usually sends the identical value:
+--   `set status = 'accepted'` on an already-accepted patch changes no column,
+--   so a transition check would wave it through and the caller would go on to
+--   apply the ops a second time.
 --
---   The caller should still wrap accept in a transaction that (a) updates the
---   patch, (b) inserts the resulting resume_version, (c) writes
---   applied_version_id. If (a) raises, nothing else happened.
+--   THE ACCEPT FLOW THIS IMPLIES, in one transaction:
+--     1. insert the resulting resume_version
+--     2. update the patch ONCE, setting status='accepted' and
+--        applied_version_id together
+--   Not the other order. A second update to fill in applied_version_id would
+--   hit the freeze, which is the point: there is exactly one write that
+--   decides a patch, and a retry of it fails loudly.
 create or replace function public.patches_decision_guard()
 returns trigger
 language plpgsql
 as $$
 begin
-    if old.status <> 'proposed' and new.status is distinct from old.status then
+    if old.status <> 'proposed' then
         raise exception
-            'patch % is already %; a decision cannot be changed', old.id, old.status
-            using errcode = 'invalid_parameter_value';
-    end if;
-
-    if old.status <> 'proposed'
-       and new.applied_version_id is distinct from old.applied_version_id
-       and old.applied_version_id is not null
-    then
-        raise exception
-            'patch % has already been applied as version %',
-            old.id, old.applied_version_id
-            using errcode = 'invalid_parameter_value';
+            'patch % was already % at %; a decided patch is immutable',
+            old.id, old.status, old.decided_at
+            using errcode = 'invalid_parameter_value',
+                  hint = 'Create a new patch instead of re-deciding this one.';
     end if;
 
     -- Stamp the decision time server-side so the CHECK in 0001 is satisfied
     -- without every caller remembering to set it.
     if new.status <> 'proposed' and new.decided_at is null then
         new.decided_at := now();
-    end if;
-
-    -- Re-opening a decided patch is not a correction, it is a new proposal.
-    if old.status <> 'proposed' and new.status = 'proposed' then
-        raise exception
-            'patch % cannot return to proposed; create a new patch', old.id
-            using errcode = 'invalid_parameter_value';
     end if;
 
     return new;

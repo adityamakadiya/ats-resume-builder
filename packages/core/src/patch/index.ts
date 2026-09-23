@@ -100,9 +100,25 @@ export function resolvePointer(
   return { found: true, value: node };
 }
 
-function clone<T>(value: T): T {
-  return structuredClone(value);
+/**
+ * Deep copy of a JSON value.
+ *
+ * Not `structuredClone`: that is a host global, and this package has to
+ * typecheck and run without `lib.dom` or a Node-only global. A
+ * `TailoredResume` is plain JSON by construction, so the three cases below
+ * are exhaustive.
+ */
+export function deepClone<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => deepClone(item)) as unknown as T;
+  if (isRecord(value)) {
+    const out: Record<string, Json> = {};
+    for (const key of Object.keys(value)) out[key] = deepClone(value[key]);
+    return out as unknown as T;
+  }
+  return value;
 }
+
+const clone = deepClone;
 
 /* ------------------------------------------------------------------ */
 /* Apply                                                               */

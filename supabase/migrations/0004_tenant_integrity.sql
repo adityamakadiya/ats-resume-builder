@@ -46,7 +46,8 @@ declare
     t text;
 begin
     foreach t in array array[
-        'documents', 'jobs', 'resumes', 'resume_versions', 'chat_sessions'
+        -- facts is in this list because it is its own parent (supersedes).
+        'documents', 'jobs', 'resumes', 'resume_versions', 'chat_sessions', 'facts'
     ]
     loop
         if not exists (
@@ -64,11 +65,6 @@ end $$;
 -- --------------------------------------------------------------------------
 -- Children: composite FKs
 -- --------------------------------------------------------------------------
-
--- facts is both a child (of documents) and its own parent (supersedes), so it
--- needs the same referenceable key before the self-FK below can be created.
-alter table facts drop constraint if exists facts_id_user_key;
-alter table facts add constraint facts_id_user_key unique (id, user_id);
 
 -- facts -> documents. `set null` on both columns is not possible here because
 -- user_id is NOT NULL, so the tenant half of the key must survive the delete.

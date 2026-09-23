@@ -77,11 +77,14 @@ describe('scoring parity with the Python reference', () => {
     }
     expect(report.sub_scores.penalty).toBeCloseTo(expected.penalty_total, 1);
 
-    // The three keyword arrays, order included: they are rendered as-is.
-    expect(report.matched_keywords).toEqual(expected.matched_keywords);
-    expect(new Set(report.missing_keywords)).toEqual(new Set(expected.missing_keywords));
-    expect(new Set(report.recoverable_keywords)).toEqual(
-      new Set(expected.recoverable_keywords),
+    // The three keyword arrays. The exporter sorts the AtsReport-level copies
+    // (compare `expected.missing_keywords`, alphabetical, against
+    // `expected.breakdown.missing_keywords`, job order), so membership is what
+    // is asserted here and exact order is asserted on the breakdown below.
+    expect([...report.matched_keywords].sort()).toEqual([...expected.matched_keywords].sort());
+    expect([...report.missing_keywords].sort()).toEqual([...expected.missing_keywords].sort());
+    expect([...report.recoverable_keywords].sort()).toEqual(
+      [...expected.recoverable_keywords].sort(),
     );
 
     // --- ScoreBreakdownV2 ------------------------------------------- //
