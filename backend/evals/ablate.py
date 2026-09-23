@@ -70,7 +70,12 @@ from atsresume.pipeline.steps import (  # noqa: E402
     extract_resume_facts,
     tailor_resume,
 )
-from atsresume.truth.guard import run_truth_guard  # noqa: E402
+from atsresume.truth.entailment import check_entailment  # noqa: E402
+from atsresume.truth.guard import (  # noqa: E402
+    entailment_pairs,
+    merge_violations,
+    run_truth_guard,
+)
 from evals.scorers import score_all  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -112,11 +117,26 @@ def _tailor_with_brief(
     because the whole point of the `gaps_merged` variant is a different user
     message. steps.py is not edited to accommodate an experiment: the shipped
     path should not carry a parameter that exists only for this file.
+
+    The copy includes `verify`, deliberately. Verification is two layers, the
+    token checks and then the entailment call, and an earlier version of this
+    file ran only the first. That does not produce a slightly noisier result,
+    it produces a systematically flattering one: the ablated variant is graded
+    by a weaker guard than `full`, so it reports fewer violations and a higher
+    pass rate, and the harness recommends deleting a step on the strength of a
+    measurement error. If `steps.verify` changes, this must change with it.
     """
+
+    def verify(draft: TailoredResume):
+        report = run_truth_guard(draft, facts, raw_resume_text, jd_terms)
+        if not get_settings().enable_entailment:
+            return report
+        return merge_violations(report, check_entailment(entailment_pairs(draft, facts)))
+
     tailored = sanitize(
         structured(system=prompts.TAILOR, user=brief, schema=TailoredResume, step="tailor")
     )
-    truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
+    truth = verify(tailored)
     repair_attempted = False
     first_draft_violations: list[str] = []
 
@@ -145,7 +165,7 @@ def _tailor_with_brief(
                 system=prompts.TAILOR, user=repair_brief, schema=TailoredResume, step="tailor"
             )
         )
-        truth = run_truth_guard(tailored, facts, raw_resume_text, jd_terms)
+        truth = verify(tailored)
 
     return TailorOutcome(
         tailored=tailored,
@@ -521,8 +541,9 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        default=True,
-        help="print the plan and the estimate without calling the API (the default)",
+        default=None,
+        help="print the plan and the estimate without calling the API. This is the "
+        "default, and passing it explicitly overrides --execute.",
     )
     parser.add_argument(
         "--execute",
@@ -535,6 +556,12 @@ def main() -> int:
         help="skip the typed confirmation. For a non-interactive shell you trust.",
     )
     args = parser.parse_args()
+
+    # --dry-run beats --execute. Somebody who typed both wanted the safe one,
+    # and a flag pair where the expensive option silently wins is a trap.
+    if args.dry_run and args.execute:
+        print("--dry-run and --execute were both given. Honouring --dry-run.", file=sys.stderr)
+        args.execute = False
 
     variants = [v.strip() for v in args.variants.split(",") if v.strip()]
     unknown = [v for v in variants if v not in VARIANTS]

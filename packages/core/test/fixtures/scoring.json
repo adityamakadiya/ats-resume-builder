@@ -1,0 +1,1073 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 0,
+            "Express": 0,
+            "Kafka": 0,
+            "Kubernetes": 0,
+            "Node.js": 0,
+            "PostgreSQL": 0,
+            "REST": 0,
+            "Redis": 0
+          },
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker",
+            "Kubernetes",
+            "Kafka"
+          ],
+          "overall": 0.0,
+          "quality_gate": 0.35,
+          "recoverable_keywords": [],
+          "relevance": 0.0,
+          "requirement_coverage": 0.0,
+          "specificity": 0.0
+        },
+        "matched_keywords": [],
+        "missing_keywords": [
+          "Docker",
+          "Express",
+          "Kafka",
+          "Kubernetes",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "overall": 0.0,
+        "penalty_total": 5.0,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_match": 0.0,
+          "penalty": 5.0,
+          "relevance_gate": 0.35,
+          "section_completeness": 100.0,
+          "skills_coverage": 0.0,
+          "specificity": 0.0
+        }
+      },
+      "name": "D1 irrelevant filler",
+      "tailored": {
+        "certifications": [],
+        "education": [],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Helped the team with day to day activities as required."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Worked on assigned tasks and reported progress to the manager."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Responsible for maintaining documentation across the department."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Microsoft Word",
+              "Communication"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Motivated team player and fast learner passionate about technology."
+        }
+      },
+      "v1_overall": 18.8
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 0,
+            "Express": 0,
+            "Kafka": 0,
+            "Kubernetes": 0,
+            "Node.js": 4,
+            "PostgreSQL": 0,
+            "REST": 0,
+            "Redis": 0
+          },
+          "keyword_coverage": 19.2,
+          "matched_keywords": [
+            "Node.js"
+          ],
+          "missing_keywords": [
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker",
+            "Kubernetes",
+            "Kafka"
+          ],
+          "overall": 12.7,
+          "quality_gate": 0.489,
+          "recoverable_keywords": [],
+          "relevance": 21.3,
+          "requirement_coverage": 25.0,
+          "specificity": 0.0
+        },
+        "matched_keywords": [
+          "Node.js"
+        ],
+        "missing_keywords": [
+          "Docker",
+          "Express",
+          "Kafka",
+          "Kubernetes",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "overall": 12.7,
+        "penalty_total": 4.0,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_match": 19.2,
+          "penalty": 4.0,
+          "relevance_gate": 0.489,
+          "section_completeness": 100.0,
+          "skills_coverage": 25.0,
+          "specificity": 0.0
+        }
+      },
+      "name": "D2 weak duties",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Worked on backend services written in Node.js."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Responsible for fixing bugs reported by the support team."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Assisted with releases and deployment activities."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "JavaScript"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend developer with experience in web development."
+        }
+      },
+      "v1_overall": 37.4
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 1,
+            "Express": 2,
+            "Kafka": 0,
+            "Kubernetes": 0,
+            "Node.js": 4,
+            "PostgreSQL": 3,
+            "REST": 2,
+            "Redis": 1
+          },
+          "keyword_coverage": 84.6,
+          "matched_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker"
+          ],
+          "missing_keywords": [
+            "Kubernetes",
+            "Kafka"
+          ],
+          "overall": 40.6,
+          "quality_gate": 0.789,
+          "recoverable_keywords": [],
+          "relevance": 67.5,
+          "requirement_coverage": 37.5,
+          "specificity": 0.0
+        },
+        "matched_keywords": [
+          "Docker",
+          "Express",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "missing_keywords": [
+          "Kafka",
+          "Kubernetes"
+        ],
+        "overall": 40.6,
+        "penalty_total": 1.5,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 0.0,
+          "experience_match": 50.0,
+          "keyword_match": 84.6,
+          "penalty": 1.5,
+          "relevance_gate": 0.789,
+          "section_completeness": 100.0,
+          "skills_coverage": 37.5,
+          "specificity": 0.0
+        }
+      },
+      "name": "D3 duty statements",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Developed REST endpoints for the settlement service."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Maintained PostgreSQL tables used by the reporting jobs."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Configured Docker images for the service."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "Express",
+              "PostgreSQL",
+              "Redis"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend engineer working with Node.js, Express and PostgreSQL on REST services."
+        }
+      },
+      "v1_overall": 70.0
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 2,
+            "Express": 3,
+            "Kafka": 0,
+            "Kubernetes": 0,
+            "Node.js": 4,
+            "PostgreSQL": 3,
+            "REST": 2,
+            "Redis": 2
+          },
+          "keyword_coverage": 84.6,
+          "matched_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker"
+          ],
+          "missing_keywords": [
+            "Kubernetes",
+            "Kafka"
+          ],
+          "overall": 72.8,
+          "quality_gate": 0.907,
+          "recoverable_keywords": [],
+          "relevance": 85.7,
+          "requirement_coverage": 87.5,
+          "specificity": 33.3
+        },
+        "matched_keywords": [
+          "Docker",
+          "Express",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "missing_keywords": [
+          "Kafka",
+          "Kubernetes"
+        ],
+        "overall": 72.8,
+        "penalty_total": 2.0,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_match": 84.6,
+          "penalty": 2.0,
+          "relevance_gate": 0.907,
+          "section_completeness": 100.0,
+          "skills_coverage": 87.5,
+          "specificity": 33.3
+        }
+      },
+      "name": "D4 good outcomes",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Designed REST endpoints on Express for merchant settlement, cutting the payout reconciliation window from two days to four hours."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Added a composite index to the PostgreSQL ledger table, reducing the nightly report query from 90 seconds to under three."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Containerised the service with Docker so that releases stopped needing a manual host setup step."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "Express",
+              "PostgreSQL",
+              "Redis",
+              "Docker"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend engineer building REST APIs on Node.js and Express, with day to day PostgreSQL and Redis work on read-heavy settlement traffic."
+        }
+      },
+      "v1_overall": 82.5
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 2,
+            "Express": 2,
+            "Kafka": 3,
+            "Kubernetes": 3,
+            "Node.js": 4,
+            "PostgreSQL": 3,
+            "REST": 1,
+            "Redis": 3
+          },
+          "keyword_coverage": 100.0,
+          "matched_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker",
+            "Kubernetes",
+            "Kafka"
+          ],
+          "missing_keywords": [],
+          "overall": 88.2,
+          "quality_gate": 1.0,
+          "recoverable_keywords": [],
+          "relevance": 100.0,
+          "requirement_coverage": 100.0,
+          "specificity": 75.0
+        },
+        "matched_keywords": [
+          "Docker",
+          "Express",
+          "Kafka",
+          "Kubernetes",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "missing_keywords": [],
+        "overall": 88.2,
+        "penalty_total": 3.0,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_match": 100.0,
+          "penalty": 3.0,
+          "relevance_gate": 1.0,
+          "section_completeness": 100.0,
+          "skills_coverage": 100.0,
+          "specificity": 75.0
+        }
+      },
+      "name": "D5 strong mechanisms",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Rewrote the settlement lookup behind a Redis cache with a 60 second TTL, cutting p95 latency from 800ms to 120ms."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Added a partial index on the PostgreSQL ledger and rewrote the query plan, taking the nightly reconciliation job from 40 minutes to 6."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Moved payout fan out onto a Kafka consumer with idempotency keys and exponential backoff retries, eliminating the duplicate payouts that manual replays caused."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Split the deploy into a Kubernetes rolling update with a readiness probe, so that a bad release stopped taking the API down for 5 minutes."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "Express",
+              "PostgreSQL",
+              "Redis",
+              "Docker",
+              "Kubernetes",
+              "Kafka"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend engineer building REST APIs on Node.js, Express and Kafka, with deep PostgreSQL indexing and Redis caching work on read-heavy settlement traffic, deployed on Docker and Kubernetes."
+        }
+      },
+      "v1_overall": 92.5
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 2,
+            "Express": 3,
+            "Kafka": 0,
+            "Kubernetes": 0,
+            "Node.js": 4,
+            "PostgreSQL": 3,
+            "REST": 2,
+            "Redis": 2
+          },
+          "keyword_coverage": 84.6,
+          "matched_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker"
+          ],
+          "missing_keywords": [
+            "Kubernetes",
+            "Kafka"
+          ],
+          "overall": 72.8,
+          "quality_gate": 0.907,
+          "recoverable_keywords": [],
+          "relevance": 85.7,
+          "requirement_coverage": 87.5,
+          "specificity": 33.3
+        },
+        "matched_keywords": [
+          "Docker",
+          "Express",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "missing_keywords": [
+          "Kafka",
+          "Kubernetes"
+        ],
+        "overall": 72.8,
+        "penalty_total": 2.0,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 100.0,
+          "experience_match": 50.0,
+          "keyword_match": 84.6,
+          "penalty": 2.0,
+          "relevance_gate": 0.907,
+          "section_completeness": 100.0,
+          "skills_coverage": 87.5,
+          "specificity": 33.3
+        }
+      },
+      "name": "honest",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Designed REST endpoints on Express for merchant settlement, cutting the payout reconciliation window from two days to four hours."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Added a composite index to the PostgreSQL ledger table, reducing the nightly report query from 90 seconds to under three."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Containerised the service with Docker so that releases stopped needing a manual host setup step."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "Express",
+              "PostgreSQL",
+              "Redis",
+              "Docker"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend engineer building REST APIs on Node.js and Express, with day to day PostgreSQL and Redis work on read-heavy settlement traffic."
+        }
+      },
+      "v1_overall": 82.5
+    },
+    {
+      "expected": {
+        "breakdown": {
+          "evidence_density": 75.0,
+          "experience_match": 50.0,
+          "keyword_counts": {
+            "Docker": 4,
+            "Express": 5,
+            "Kafka": 5,
+            "Kubernetes": 5,
+            "Node.js": 11,
+            "PostgreSQL": 6,
+            "REST": 7,
+            "Redis": 5
+          },
+          "keyword_coverage": 100.0,
+          "matched_keywords": [
+            "Node.js",
+            "PostgreSQL",
+            "Redis",
+            "REST",
+            "Express",
+            "Docker",
+            "Kubernetes",
+            "Kafka"
+          ],
+          "missing_keywords": [],
+          "overall": 51.7,
+          "quality_gate": 0.911,
+          "recoverable_keywords": [],
+          "relevance": 86.4,
+          "requirement_coverage": 62.5,
+          "specificity": 0.0
+        },
+        "matched_keywords": [
+          "Docker",
+          "Express",
+          "Kafka",
+          "Kubernetes",
+          "Node.js",
+          "PostgreSQL",
+          "REST",
+          "Redis"
+        ],
+        "missing_keywords": [],
+        "overall": 51.7,
+        "penalty_total": 14.5,
+        "recoverable_keywords": [],
+        "sub_scores": {
+          "evidence_density": 75.0,
+          "experience_match": 50.0,
+          "keyword_match": 100.0,
+          "penalty": 14.5,
+          "relevance_gate": 0.911,
+          "section_completeness": 100.0,
+          "skills_coverage": 62.5,
+          "specificity": 0.0
+        }
+      },
+      "name": "stuffed",
+      "tailored": {
+        "certifications": [],
+        "education": [
+          {
+            "dates": "2019 - 2023",
+            "degree": "B.E. in Computer Engineering",
+            "institution": "GTU",
+            "source_id": "ED1"
+          }
+        ],
+        "experience": [
+          {
+            "bullets": [
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Designed REST APIs on Node.js and Express for merchant settlement using PostgreSQL, Redis, Docker, Kubernetes and Kafka, cutting the payout reconciliation window from two days to four hours."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Worked on PostgreSQL, Redis and Kafka pipelines, reducing cost by 45%."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Responsible for Node.js, Express, Docker and Kubernetes services, reducing cost by 45%."
+              },
+              {
+                "keywords": [],
+                "source_ids": [
+                  "E1.B1"
+                ],
+                "text": "Leveraged REST, RESTful and Kafka best practices as a proven track record team player."
+              }
+            ],
+            "company": "Acme Payments",
+            "end_date": "Present",
+            "location": "Bengaluru",
+            "source_id": "E1",
+            "start_date": "Jun 2023",
+            "title": "Backend Engineer"
+          }
+        ],
+        "headline": "Backend Engineer",
+        "other_sections": [],
+        "projects": [],
+        "rewrite_notes": [],
+        "section_order": [],
+        "skills": [
+          {
+            "category": "Backend",
+            "items": [
+              "Node.js",
+              "NodeJS",
+              "PostgreSQL",
+              "Postgres",
+              "Redis",
+              "REST",
+              "RESTful",
+              "Express",
+              "Docker",
+              "Kubernetes",
+              "K8s",
+              "Kafka"
+            ],
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "summary": {
+          "source_ids": [
+            "SUMMARY"
+          ],
+          "text": "Backend engineer skilled in Node.js, PostgreSQL, Redis, REST, Express, Docker, Kubernetes and Kafka, building REST APIs on Node.js and Express with PostgreSQL and Redis on read-heavy settlement traffic."
+        }
+      },
+      "v1_overall": 83.1
+    }
+  ],
+  "facts": {
+    "certifications": [],
+    "contact": {
+      "email": "rohan.iyer@example.com",
+      "links": [
+        {
+          "label": "GitHub",
+          "url": "https://github.com/example"
+        },
+        {
+          "label": "LinkedIn",
+          "url": "https://linkedin.com/in/example"
+        }
+      ],
+      "location": "Pune, India",
+      "name": "Rohan Iyer",
+      "phone": "+91 98765 43210"
+    },
+    "education": [],
+    "experience": [],
+    "headline": "",
+    "other_sections": [],
+    "projects": [],
+    "skills": [],
+    "summary": "",
+    "total_years_experience": 0.0
+  },
+  "job": {
+    "company": "Northwind Logistics",
+    "compensation": "",
+    "employment_type": "",
+    "experience_years": {
+      "max": 5.0,
+      "min": 2.0,
+      "raw": "2-5 years"
+    },
+    "extraction_confidence": "high",
+    "extraction_notes": "",
+    "implicit_requirements": [],
+    "keywords": [
+      {
+        "term": "Node.js",
+        "variants": [
+          "Node",
+          "NodeJS"
+        ],
+        "weight": 5
+      },
+      {
+        "term": "PostgreSQL",
+        "variants": [
+          "Postgres"
+        ],
+        "weight": 5
+      },
+      {
+        "term": "Redis",
+        "variants": [],
+        "weight": 3
+      },
+      {
+        "term": "REST",
+        "variants": [
+          "RESTful"
+        ],
+        "weight": 4
+      },
+      {
+        "term": "Express",
+        "variants": [],
+        "weight": 2
+      },
+      {
+        "term": "Docker",
+        "variants": [],
+        "weight": 3
+      },
+      {
+        "term": "Kubernetes",
+        "variants": [
+          "K8s"
+        ],
+        "weight": 2
+      },
+      {
+        "term": "Kafka",
+        "variants": [],
+        "weight": 2
+      }
+    ],
+    "location": "Bengaluru, India",
+    "requirements": [
+      {
+        "category": "framework",
+        "evidence": "Strong Node.js experience",
+        "importance": "required",
+        "term": "Node.js"
+      },
+      {
+        "category": "database",
+        "evidence": "PostgreSQL query optimisation and indexing",
+        "importance": "required",
+        "term": "PostgreSQL query optimisation and indexing"
+      },
+      {
+        "category": "architecture",
+        "evidence": "Design and ship REST APIs",
+        "importance": "required",
+        "term": "REST API design"
+      },
+      {
+        "category": "database",
+        "evidence": "Redis caching a plus",
+        "importance": "preferred",
+        "term": "Redis caching"
+      },
+      {
+        "category": "cloud_devops",
+        "evidence": "Containerised deployment",
+        "importance": "preferred",
+        "term": "Docker"
+      }
+    ],
+    "responsibilities": [],
+    "title": "Backend Engineer",
+    "work_mode": "unspecified"
+  },
+  "note": "Generated by backend/scripts/export_score_fixtures.py. The Python scorer is the reference implementation. Do not hand-edit."
+}

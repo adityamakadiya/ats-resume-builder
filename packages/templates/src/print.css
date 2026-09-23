@@ -197,8 +197,11 @@
 }
 
 /* The separator is drawn, never written. Text content stays ASCII for the
-   parser, and a missing field can never leave a dangling divider behind. */
-.rz-contact > li + li::before {
+   parser, and a missing field can never leave a dangling divider behind.
+   It trails its item rather than leading the next one, because a wrapped
+   contact line that begins with a separator reads as a mistake and one that
+   ends with a trailing dot reads as a continuation. */
+.rz-contact > li:not(:last-child)::after {
   content: "\00B7";
   margin: 0 0.5em;
   color: var(--rule);
@@ -290,24 +293,26 @@
 
 /* -------------------------------------------------------------- bullets -- */
 
-.rz-bullets {
+/* Specificity has to beat the `.rz ul` reset above, or the markers vanish
+   and every bullet reads as a paragraph. */
+.rz .rz-bullets {
   list-style: disc outside;
   margin-top: var(--gap-head);
   padding-left: 1.05em;
 }
 
-.rz-bullets > li {
+.rz .rz-bullets > li {
   margin-top: var(--gap-line);
   padding-left: 0.12em;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
-.rz-bullets > li:first-child {
+.rz .rz-bullets > li:first-child {
   margin-top: 0;
 }
 
-.rz-bullets > li::marker {
+.rz .rz-bullets > li::marker {
   color: var(--ink-mute);
   font-size: 0.85em;
 }
@@ -364,18 +369,23 @@
   margin-top: calc(var(--gap-line) * 0.5);
 }
 
-.rz-plain {
+.rz .rz-plain {
   margin: 0;
   padding-left: 1.05em;
   list-style: disc outside;
 }
 
-.rz-plain > li {
+.rz .rz-plain > li::marker {
+  color: var(--ink-mute);
+  font-size: 0.85em;
+}
+
+.rz .rz-plain > li {
   margin-top: var(--gap-line);
   break-inside: avoid;
 }
 
-.rz-plain > li:first-child {
+.rz .rz-plain > li:first-child {
   margin-top: 0;
 }
 
@@ -415,7 +425,7 @@
   letter-spacing: 0.12em;
 }
 
-.rz--compact .rz-bullets {
+.rz.rz--compact .rz-bullets {
   padding-left: 0.95em;
 }
 

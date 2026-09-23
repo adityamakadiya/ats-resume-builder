@@ -31,9 +31,13 @@ from atsresume.pipeline import scoring_v2 as v2
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture
-def job() -> JobSpec:
-    """A backend posting that the conftest ``facts`` fixture plausibly answers."""
+def build_job() -> JobSpec:
+    """A backend posting that the conftest ``facts`` fixture plausibly answers.
+
+    Module level rather than fixture-only so scripts/export_score_fixtures.py
+    can freeze the same posting the tests reason about. Two definitions of the
+    reference job would drift.
+    """
     return JobSpec(
         company="Northwind Logistics",
         title="Backend Engineer",
@@ -197,6 +201,39 @@ D5_STRONG = make_doc(
     ],
 )
 
+@pytest.fixture
+def job() -> JobSpec:
+    return build_job()
+
+
+
+# The document best-of-N against v1 converges on: every posting term crammed
+# into the skills list, then repeated through the bullets. It covers strictly
+# more keywords than HONEST and is strictly worse to read.
+STUFFED = make_doc(
+    summary=(
+        "Backend engineer skilled in Node.js, PostgreSQL, Redis, REST, Express, Docker, "
+        "Kubernetes and Kafka, building REST APIs on Node.js and Express with PostgreSQL "
+        "and Redis on read-heavy settlement traffic."
+    ),
+    skills=[
+        "Node.js", "NodeJS", "PostgreSQL", "Postgres", "Redis", "REST", "RESTful",
+        "Express", "Docker", "Kubernetes", "K8s", "Kafka",
+    ],
+    bullets=[
+        "Designed REST APIs on Node.js and Express for merchant settlement using "
+        "PostgreSQL, Redis, Docker, Kubernetes and Kafka, cutting the payout "
+        "reconciliation window from two days to four hours.",
+        "Worked on PostgreSQL, Redis and Kafka pipelines, reducing cost by 45%.",
+        "Responsible for Node.js, Express, Docker and Kubernetes services, reducing "
+        "cost by 45%.",
+        "Leveraged REST, RESTful and Kafka best practices as a proven track record "
+        "team player.",
+    ],
+)
+
+HONEST = D4_GOOD
+
 LADDER = [
     ("D1 irrelevant filler", D1_IRRELEVANT),
     ("D2 weak duties", D2_WEAK),
@@ -269,28 +306,7 @@ def test_stuffed_scores_below_honest(job, facts, capsys):
     bullets. It covers strictly more keywords than the honest document and it
     is strictly worse to read.
     """
-    honest = D4_GOOD
-    stuffed = make_doc(
-        summary=(
-            "Backend engineer skilled in Node.js, PostgreSQL, Redis, REST, Express, Docker, "
-            "Kubernetes and Kafka, building REST APIs on Node.js and Express with PostgreSQL "
-            "and Redis on read-heavy settlement traffic."
-        ),
-        skills=[
-            "Node.js", "NodeJS", "PostgreSQL", "Postgres", "Redis", "REST", "RESTful",
-            "Express", "Docker", "Kubernetes", "K8s", "Kafka",
-        ],
-        bullets=[
-            "Designed REST APIs on Node.js and Express for merchant settlement using "
-            "PostgreSQL, Redis, Docker, Kubernetes and Kafka, cutting the payout "
-            "reconciliation window from two days to four hours.",
-            "Worked on PostgreSQL, Redis and Kafka pipelines, reducing cost by 45%.",
-            "Responsible for Node.js, Express, Docker and Kubernetes services, reducing "
-            "cost by 45%.",
-            "Leveraged REST, RESTful and Kafka best practices as a proven track record "
-            "team player.",
-        ],
-    )
+    honest, stuffed = HONEST, STUFFED
 
     honest_b = v2.compute_breakdown(job, facts, honest)
     stuffed_b = v2.compute_breakdown(job, facts, stuffed)

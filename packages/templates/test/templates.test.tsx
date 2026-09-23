@@ -111,14 +111,17 @@ describe("the sparse fixture leaves nothing dangling", () => {
 
       it("renders no orphan separator", () => {
         const root = draw(meta, sparse);
-        const text = (root.textContent ?? "").replace(/\s+/g, " ");
-        // A date range with one end missing, a contact line with a gap in it,
-        // a skills line that lost an item.
-        expect(text).not.toMatch(/\s-\s*$/);
-        expect(text).not.toMatch(/(^|\s)-\s/);
-        expect(text).not.toMatch(/,\s*,/);
-        expect(text).not.toMatch(/\|\s*\|/);
-        expect(text).not.toMatch(/,\s*$/);
+        // Checked per element, because concatenated textContent cannot tell a
+        // real date range from a hyphen left behind by a missing end date.
+        for (const el of Array.from(root.querySelectorAll("li, dt, dd, p, span, h1, h2, h3"))) {
+          const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+          if (text === "") continue;
+          expect(text, `dangling separator in ${meta.id}: ${JSON.stringify(text)}`).not.toMatch(
+            /^[-,;|]|[-,;|]$/,
+          );
+          expect(text).not.toMatch(/,\s*,/);
+          expect(text).not.toMatch(/\|\s*\|/);
+        }
       });
 
       it("renders no link without a destination or a label", () => {

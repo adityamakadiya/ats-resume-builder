@@ -42,6 +42,7 @@ import httpx
 from selectolax.parser import HTMLParser
 
 from ..config import get_settings
+from .net import BlockedAddressError, assert_public_host
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,17 @@ READER_ENDPOINT = "https://r.jina.ai/"
 READER_TIMEOUT_S = 45.0
 
 STRIP_TAGS = ("script", "style", "noscript", "svg", "header", "footer", "nav", "form")
+
+# Redirects are walked by hand rather than by httpx, so that every hop's host
+# goes through the SSRF check before a request is sent to it. Letting the client
+# follow them internally means a public URL that 302s to 169.254.169.254 is
+# fetched and returned before anything here gets a look at it.
+MAX_REDIRECTS = 5
+
+# A job description is a page of prose. Anything past this is either broken or
+# aimed at the process's memory, and streaming means we notice before we have
+# swallowed it.
+MAX_BODY_BYTES = 5 * 1024 * 1024
 
 
 @dataclass
@@ -191,11 +203,74 @@ def _blocked(url: str, portal: str, reason: str, method: str) -> JdFetchResult:
     )
 
 
+class _FetchRefused(Exception):
+    """A fetch this module refused on its own terms, with a reason to show."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def assert_public_url(url: str) -> list[str]:
+    """Run the SSRF check over a URL's host. Raises ``BlockedAddressError``."""
+    try:
+        host = urlparse(url).hostname or ""
+    except ValueError as exc:
+        raise BlockedAddressError("That does not look like a job posting URL.") from exc
+    return assert_public_host(host)
+
+
+def _read_capped(response: httpx.Response) -> httpx.Response:
+    """Drain a streamed response into a new one, refusing an oversized body."""
+    declared = response.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise _FetchRefused("That page is far too large to be a job description.")
+
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in response.iter_bytes():
+        total += len(chunk)
+        if total > MAX_BODY_BYTES:
+            raise _FetchRefused("That page is far too large to be a job description.")
+        chunks.append(chunk)
+
+    # A fresh Response because the streamed one has no ``.text`` once read in
+    # chunks. Content-encoding is dropped: ``iter_bytes`` already decoded it.
+    return httpx.Response(
+        status_code=response.status_code,
+        headers={"content-type": response.headers.get("content-type", "text/html")},
+        content=b"".join(chunks),
+        request=response.request,
+    )
+
+
+def _fetch_guarded(client: httpx.Client, url: str) -> httpx.Response:
+    """GET a URL, checking the host on every hop of the redirect chain.
+
+    The client is configured with ``follow_redirects=False`` so that each
+    ``Location`` is resolved and validated here before it is requested.
+    """
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        assert_public_url(current)
+        with client.stream("GET", current) as response:
+            if not response.is_redirect:
+                return _read_capped(response)
+            location = response.headers.get("location", "").strip()
+            if not location:
+                # A redirect status with nowhere to go. Treat the body as final.
+                return _read_capped(response)
+            current = str(httpx.URL(current).join(location))
+    raise _FetchRefused("That link redirects too many times to follow.")
+
+
 def _fetch_linkedin_guest(client: httpx.Client, job_id: str, url: str) -> JdFetchResult | None:
     guest = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
     try:
-        response = client.get(guest)
-    except httpx.HTTPError:
+        # Hardcoded host, but it goes through the same check as everything
+        # else: a hostname is only as trustworthy as what DNS returns for it.
+        response = _fetch_guarded(client, guest)
+    except (httpx.HTTPError, BlockedAddressError, _FetchRefused):
         return None
     if response.status_code != 200:
         return None
@@ -212,6 +287,14 @@ def fetch_jd(url: str) -> JdFetchResult:
         raise JdFetchError("That does not look like a job posting URL.")
 
     portal = portal_of(url)
+
+    # Before anything else, and before any third party is handed the URL: the
+    # candidate supplies this, and hosted that makes it a request forgery
+    # primitive aimed at the operator's own network.
+    try:
+        assert_public_url(url)
+    except BlockedAddressError as exc:
+        return _blocked(url, portal, str(exc), "url-check")
 
     # Naukri refuses every request this process can make, so the direct attempt
     # is pure latency. Go straight to the reader.
@@ -231,8 +314,7 @@ def fetch_jd(url: str) -> JdFetchResult:
     with httpx.Client(
         headers=HEADERS,
         timeout=settings.jd_fetch_timeout_s,
-        follow_redirects=True,
-        max_redirects=5,
+        follow_redirects=False,
     ) as client:
         if portal == "LinkedIn":
             job_id = linkedin_job_id(url)
@@ -242,7 +324,12 @@ def fetch_jd(url: str) -> JdFetchResult:
                     return result
 
         try:
-            response = client.get(url)
+            response = _fetch_guarded(client, url)
+        except BlockedAddressError as exc:
+            # Almost always a redirect that hopped off the public internet.
+            return _blocked(url, portal, str(exc), "url-check")
+        except _FetchRefused as exc:
+            return _blocked(url, portal, exc.reason, "http")
         except httpx.TimeoutException:
             return _blocked(url, portal, f"{portal} did not respond in time.", "http")
         except httpx.HTTPError as exc:
@@ -325,6 +412,18 @@ def _fetch_via_reader(url: str) -> str | None:
     if not settings.use_reader_fallback:
         return None
 
+    # This tier does not connect to the URL itself, it hands it to Jina. The
+    # host check still runs, for two reasons: handing someone else's
+    # infrastructure a private address is still an attempt at reaching it — the
+    # reader would resolve 169.254.169.254 from wherever it runs, and against
+    # its own metadata endpoint at that — and it keeps the operator's internal
+    # hostnames from leaving the process in a third party's request log.
+    try:
+        assert_public_url(url)
+    except BlockedAddressError as exc:
+        logger.info("Refusing to send %s to the reader: %s", url, exc)
+        return None
+
     # Deliberately NOT the browser User-Agent used elsewhere in this module.
     # The reader returns 403 to anything impersonating a browser, which is a
     # reasonable anti-abuse rule and the opposite of what job sites want. Spoof
@@ -366,6 +465,14 @@ def _fetch_with_playwright(url: str) -> str | None:
     captcha, and it is not retried when one was already detected.
     """
     settings = get_settings()
+    # A browser is the most willing SSRF client there is: page.goto will load a
+    # private address without complaint and run whatever it finds there.
+    try:
+        assert_public_url(url)
+    except BlockedAddressError as exc:
+        logger.info("Refusing to open %s in a browser: %s", url, exc)
+        return None
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
