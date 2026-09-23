@@ -28,7 +28,10 @@ export function PickTemplate({ documentId }: { documentId?: string }) {
       response = await fetch("/api/resumes", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ templateId }),
+        // documentId travels in the body, not just the URL: the resume has
+        // to record which upload it came from or the truth guard has no
+        // text to check against. See migration 0007.
+        body: JSON.stringify({ templateId, documentId }),
       });
     } catch {
       setBusyStep(null);

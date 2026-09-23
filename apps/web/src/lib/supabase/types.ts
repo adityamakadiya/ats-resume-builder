@@ -28,15 +28,49 @@ export type ResumeRow = {
   /** Free text in the database. Anything unrecognised is shown verbatim. */
   status: string;
   job_id: string | null;
+  /**
+   * The upload this resume was created from, added in migration 0007.
+   *
+   * Null for a resume started from scratch, and null again if the source
+   * document is later deleted. The truth guard reads `documents.raw_text`
+   * through this, so null means there is nothing to check a rewrite against
+   * and the editor has to say so rather than report a pass.
+   */
+  source_document_id: string | null;
+  /**
+   * The version currently shown in the editor. Null until the first version
+   * is written, which is the state every resume is in the moment it is
+   * created: /api/resumes inserts the row before any document exists.
+   */
+  current_version_id: string | null;
+  /** Shape of `resume_versions.doc_json`. Bumped on a breaking change. */
+  schema_version: number;
+  /** Set when this resume was tailored from a master. Null otherwise. */
+  base_resume_id: string | null;
   updated_at: string;
   created_at: string;
 };
 
 /**
- * One row of the list, after the score has been joined on from
- * `resume_jobs.report_json` and the target role from `jobs`.
+ * One row of the list.
+ *
+ * Deliberately a Pick of ResumeRow rather than an extension of it. The list
+ * query selects a handful of columns, and typing the result as the whole row
+ * meant that every column added to the table broke this file, in a place with
+ * nothing to do with the change. Widening the table should not require
+ * touching a list that does not display the new column.
  */
-export type ResumeListItem = ResumeRow & {
+export type ResumeListItem = Pick<
+  ResumeRow,
+  | "id"
+  | "title"
+  | "template_id"
+  | "status"
+  | "job_id"
+  | "source_document_id"
+  | "created_at"
+  | "updated_at"
+> & {
   targetRole: string | null;
   company: string | null;
   /** The computed ATS score, 0 to 100, or null when nothing has been scored. */

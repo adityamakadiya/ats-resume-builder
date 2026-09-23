@@ -13,6 +13,8 @@ import { NextResponse } from "next/server";
 import { DEFAULT_TEMPLATE_ID, TEMPLATES } from "@ats/templates";
 import { getServerClient } from "@/lib/supabase/server";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function refuse(reason: string, remedy: string, status: number) {
   return NextResponse.json({ ok: false, reason, remedy }, { status });
 }
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { templateId?: unknown; title?: unknown };
+  let body: { templateId?: unknown; title?: unknown; documentId?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -65,13 +67,50 @@ export async function POST(request: Request) {
       ? body.title.trim().slice(0, 120)
       : "Untitled resume";
 
+  /*
+    The upload this resume is being created from.
+
+    It used to be carried only in the query string, read to build the next
+    URL, and then dropped. That looked harmless and was not: the truth guard
+    checks every rewritten line against `documents.raw_text`, so a resume that
+    cannot name its source document has no corpus to be checked against. The
+    failure would have presented as the guard passing everything, which is the
+    worst shape a bug in this product can take, because it looks like success.
+
+    Not validated against the documents table here. The composite foreign key
+    added in 0007 is `(source_document_id, user_id) references documents (id,
+    user_id)`, so Postgres refuses a document belonging to anyone else, and a
+    check in application code would be a second opinion that can drift from
+    the one that is actually enforced.
+  */
+  const sourceDocumentId =
+    typeof body.documentId === "string" && UUID.test(body.documentId)
+      ? body.documentId
+      : null;
+
   const { data, error } = await supabase
     .from("resumes")
-    .insert({ user_id: user.id, template_id: templateId, title, status: "draft" })
+    .insert({
+      user_id: user.id,
+      template_id: templateId,
+      title,
+      status: "draft",
+      source_document_id: sourceDocumentId,
+    })
     .select("id")
     .single();
 
   if (error) {
+    // 23503 is a foreign key violation, which here means the document id does
+    // not resolve for this user: deleted, or never theirs. Retrying will not
+    // help, so say what to do instead of inviting another attempt.
+    if (error.code === "23503") {
+      return refuse(
+        "That upload could not be found.",
+        "It may have been deleted. Upload the resume again, or start from scratch.",
+        422
+      );
+    }
     return refuse(
       "The resume could not be created.",
       `${error.message}. Nothing was saved, so it is safe to try again.`,

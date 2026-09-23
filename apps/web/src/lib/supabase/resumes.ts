@@ -32,6 +32,7 @@ type Joined = {
   template_id: string;
   status: string;
   job_id: string | null;
+  source_document_id: string | null;
   created_at: string;
   updated_at: string;
   jobs: { title: string | null; company: string | null } | null;
@@ -67,7 +68,10 @@ export async function listResumes(): Promise<ResumesResult> {
   const { data, error } = await supabase
     .from("resumes")
     .select(
-      "id, title, template_id, status, job_id, created_at, updated_at, jobs(title, company), resume_jobs(report_json)"
+      // source_document_id rides along so a card can name the file it came
+      // from, and so a resume whose upload was deleted can say so rather
+      // than looking identical to one that never had an upload.
+      "id, title, template_id, status, job_id, source_document_id, created_at, updated_at, jobs(title, company), resume_jobs(report_json)"
     )
     .order("updated_at", { ascending: false })
     .limit(200);
@@ -108,6 +112,7 @@ export async function listResumes(): Promise<ResumesResult> {
     template_id: row.template_id,
     status: row.status,
     job_id: row.job_id,
+    source_document_id: row.source_document_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
     targetRole: nonEmpty(row.jobs?.title),
