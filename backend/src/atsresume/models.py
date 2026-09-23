@@ -406,6 +406,13 @@ class ViolationCode(StrEnum):
     UNSOURCED_METRIC = "UNSOURCED_METRIC"
     UNSOURCED_TECH = "UNSOURCED_TECH"
     ALTERED_EMPLOYER_FACT = "ALTERED_EMPLOYER_FACT"
+    # A figure that is real, but attached to an achievement it did not come
+    # from. The commonest fabrication a language model commits on a resume, and
+    # the one the tailoring prompt asks against without anything enforcing it.
+    DUPLICATED_METRIC = "DUPLICATED_METRIC"
+    # A claim carrying no metric and no vocabulary technology, which the token
+    # checks are structurally unable to see. Caught by entailment instead.
+    UNSUPPORTED_CLAIM = "UNSUPPORTED_CLAIM"
 
 
 class TruthViolation(BaseModel):

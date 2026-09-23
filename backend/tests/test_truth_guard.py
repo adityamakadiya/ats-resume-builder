@@ -342,3 +342,72 @@ def test_implication_runs_one_way_only(tailored, facts):
     raw = RAW + "\n- Built a retry queue for failed payouts."
     report = run_truth_guard(draft, facts, raw, jd_terms=["BullMQ"])
     assert ViolationCode.UNSOURCED_TECH in codes(report)
+
+
+# --------------------------------------------------------------------------- #
+# Metric binding                                                               #
+# --------------------------------------------------------------------------- #
+#
+# The first version of this guard accepted any figure whose digits appeared
+# anywhere in the corpus. That licensed the commonest fabrication a model
+# commits on a resume: taking a real number and attaching it to an achievement
+# it did not come from. The tailoring prompt asks against it in prose; these
+# tests are what actually enforce it.
+
+
+def test_metric_relocated_to_another_achievement_is_caught(tailored, facts):
+    """45% is real, but it belongs to the Redis caching work in E1.B2.
+
+    Citing only E1.B1 and claiming it for the REST API work is a fabrication,
+    even though the digits appear in the uploaded resume.
+    """
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets.append(
+        TailoredBullet(
+            text="Shipped merchant settlement endpoints, lifting throughput by 45%.",
+            source_ids=["E1.B1"],
+        )
+    )
+    report = run_truth_guard(draft, facts, RAW)
+    assert ViolationCode.UNSOURCED_METRIC in codes(report)
+
+
+def test_a_summary_may_aggregate_a_figure_from_the_wider_resume(tailored, facts):
+    """A summary speaks for the whole document, so the corpus is its source.
+
+    This is the one place the looser rule is correct: a summary that says the
+    candidate cut response time by 45% is restating the resume, not inventing.
+    """
+    draft = copy.deepcopy(tailored)
+    draft.summary.text = "Backend engineer who cut settlement response time by 45%."
+    draft.summary.source_ids = ["SUMMARY"]
+    report = run_truth_guard(draft, facts, RAW)
+    assert ViolationCode.UNSOURCED_METRIC not in codes(report)
+
+
+def test_the_same_figure_may_not_be_claimed_by_two_bullets(tailored, facts):
+    """One achievement stretched across a page reads as padding, and is.
+
+    The tailoring prompt says 'Do not reuse the same figure in two bullets'.
+    Until now nothing checked it.
+    """
+    draft = copy.deepcopy(tailored)
+    draft.experience[0].bullets.append(
+        TailoredBullet(
+            text="Tuned the reconciliation query path, cutting response time by 45%.",
+            source_ids=["E1.B2"],
+        )
+    )
+    report = run_truth_guard(draft, facts, RAW)
+    assert ViolationCode.DUPLICATED_METRIC in codes(report)
+
+
+def test_a_summary_restating_a_bullets_figure_is_not_a_duplicate(tailored, facts):
+    """Uniqueness is a rule about bullets competing with each other.
+
+    The shipped fixture already has 45% in both the summary and a bullet, which
+    is exactly how a good resume reads. If this fires, the rule is too wide.
+    """
+    report = run_truth_guard(tailored, facts, RAW)
+    assert ViolationCode.DUPLICATED_METRIC not in codes(report)
+    assert report.passed, [v.detail for v in report.violations]

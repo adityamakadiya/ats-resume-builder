@@ -64,6 +64,10 @@ _METRIC = re.compile(
 
 _DIGITS = re.compile(r"[^0-9]")
 
+# Lines that speak for the document rather than for one achievement, and may
+# therefore draw a figure from anywhere in it.
+_AGGREGATING_LOCATIONS = ("Summary", "Headline")
+
 
 def _metrics(text: str) -> list[str]:
     return [m.group(0).strip().lower() for m in _METRIC.finditer(text)]
@@ -126,6 +130,10 @@ def run_truth_guard(
     corpus_tech |= implied_by(corpus_tech)
     corpus_digits = {d for d in (_digits_of(m) for m in _metrics(corpus)) if d}
 
+    # Which bullet has already claimed a given figure, so the same number cannot
+    # be spread across a page as if it were several achievements.
+    claimed_by: dict[str, str] = {}
+
     def check_line(location: str, text: str, source_ids: list[str]) -> None:
         if not text.strip():
             return
@@ -154,17 +162,55 @@ def run_truth_guard(
         source_text = " ".join(index[s] for s in source_ids if s in index)
         source_digits = {d for d in (_digits_of(m) for m in _metrics(source_text)) if d}
 
+        # A summary speaks for the whole document, so it may restate a figure
+        # from any part of it. A bullet speaks only for its own achievement, and
+        # must find its figures in the facts it actually cites. Accepting the
+        # corpus everywhere was the guard's largest hole: a real 45% earned by
+        # one piece of work licensed a fabricated 45% on a different one.
+        aggregates = location.startswith(_AGGREGATING_LOCATIONS)
+        is_bullet = " / bullet " in location
+
         for metric in _metrics(text):
             digits = _digits_of(metric)
-            if digits and digits not in source_digits and digits not in corpus_digits:
+            if not digits:
+                continue
+
+            if digits not in source_digits and not (aggregates and digits in corpus_digits):
+                elsewhere = digits in corpus_digits
                 violations.append(
                     TruthViolation(
                         code=ViolationCode.UNSOURCED_METRIC,
                         location=location,
-                        detail=f"The figure '{metric}' does not appear anywhere in the uploaded resume.",
+                        detail=(
+                            f"The figure '{metric}' appears elsewhere in the resume but not in "
+                            f"the facts this line cites ({', '.join(source_ids) or 'none'})."
+                            if elsewhere
+                            else f"The figure '{metric}' does not appear anywhere in the "
+                            "uploaded resume."
+                        ),
                         offending=text,
                     )
                 )
+                continue
+
+            # Uniqueness is a rule about bullets competing with one another. A
+            # summary restating a bullet's number is how a good resume reads.
+            if is_bullet:
+                first = claimed_by.get(digits)
+                if first is not None and first != location:
+                    violations.append(
+                        TruthViolation(
+                            code=ViolationCode.DUPLICATED_METRIC,
+                            location=location,
+                            detail=(
+                                f"The figure '{metric}' is already claimed at {first}. One "
+                                "achievement stretched across two bullets reads as padding."
+                            ),
+                            offending=text,
+                        )
+                    )
+                else:
+                    claimed_by.setdefault(digits, location)
 
         for tech in terms_present(text, vocabulary):
             if tech not in corpus_tech:
