@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     # fabrications that carry neither, which are the ones that end interviews.
     # Switchable because it is the only check that can be wrong.
     enable_entailment: bool = True
+    # 'v2' or 'v1'. v1 is kept only as a rollback: it awarded thirty free
+    # points and preferred a keyword-stuffed draft to an honest one.
+    scorer_version: str = "v2"
     # Deliberately not a temp directory. The previous cache lived in one and the
     # operating system cleared it, which meant the only state in the system was
     # state that quietly disappeared.

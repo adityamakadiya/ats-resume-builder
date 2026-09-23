@@ -323,7 +323,7 @@ async def tailor(request: TailorRequest) -> TailorResponse:
     import time
 
     from .llm import current_usage, start_usage
-    from .pipeline.scoring import compute_ats_report
+    from .pipeline.score import compute_ats_report
 
     facts, raw_text = _resolve_resume(request)
     jd_text = clamp_jd_text(request.jd_text)
@@ -381,7 +381,7 @@ async def score(request: ScoreRequest) -> AtsReport:
     can call it on every change and show the number moving as you work. That is
     the whole payoff of having refused to let the model invent the number.
     """
-    from .pipeline.scoring import compute_ats_report
+    from .pipeline.score import compute_ats_report
 
     return compute_ats_report(request.job, request.facts, request.tailored)
 

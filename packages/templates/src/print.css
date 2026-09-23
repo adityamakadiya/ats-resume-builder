@@ -448,6 +448,12 @@
   min-width: 0;
 }
 
+.rz--modern .rz-header {
+  padding-bottom: calc(var(--block-gap) * 0.6em);
+  margin-bottom: var(--gap-section);
+  border-bottom: 0.6pt solid var(--rule);
+}
+
 .rz--modern .rz-name {
   color: var(--accent);
 }

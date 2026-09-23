@@ -1,4 +1,4 @@
-from .scoring import compute_ats_report
+from .score import compute_ats_report
 from .steps import (
     PipelineResult,
     analyze_gaps,

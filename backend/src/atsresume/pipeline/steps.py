@@ -18,12 +18,11 @@ from ..models import (
     TailoredResume,
     TruthReport,
 )
-from ..config import get_settings
 from ..truth.entailment import check_entailment
 from ..truth.guard import entailment_pairs, merge_violations, run_truth_guard
 from . import prompts
 from .sanitize import sanitize
-from .scoring import compute_ats_report
+from .score import compute_ats_report
 
 logger = logging.getLogger(__name__)
 
