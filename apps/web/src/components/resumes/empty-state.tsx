@@ -12,7 +12,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/link-button";
 
 const STEPS = [
   {
@@ -78,14 +78,14 @@ export function ResumesEmptyState() {
         </ol>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Button
-            render={<Link href="/start" />}
+          <LinkButton
             size="lg"
             className="gap-2 rounded-xs bg-stamp px-5 py-5 text-[0.9375rem] text-paper-raised hover:bg-stamp/90"
+            href="/start"
           >
             <Upload aria-hidden="true" />
             Upload your resume
-          </Button>
+          </LinkButton>
           <Link
             href="/start/template"
             className="inline-flex items-center gap-1.5 rounded-xs px-1 py-2 text-[0.875rem] text-ink-muted underline decoration-rule-strong underline-offset-4 hover:text-ink"

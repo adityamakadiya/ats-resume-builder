@@ -1,0 +1,134 @@
+/**
+ * POST /api/start/upload
+ *
+ * Intake only. This handler puts the bytes somewhere durable and records
+ * that they exist; it does not parse, extract or score. Extraction is the
+ * backend pipeline's job, and the `documents` row it needs is what this
+ * creates.
+ *
+ * It is a route handler and not a browser call for the reason stated in
+ * lib/supabase/client.ts: writes have invariants the database cannot state
+ * on its own. Here, that the Storage object and the `documents` row either
+ * both exist or neither does. If the insert fails, the object is removed
+ * again, because an orphaned object is a bill nobody can trace and a GDPR
+ * erasure that will silently miss.
+ *
+ * Client-side validation is repeated here in full. The browser check exists
+ * so a 14MB file fails in 2ms; this one exists because the browser check can
+ * be skipped entirely with one curl.
+ */
+
+import { NextResponse } from "next/server";
+import { getServerClient } from "@/lib/supabase/server";
+import { validateResumeFile } from "@/components/upload/validate";
+
+const BUCKET = "resumes";
+
+function refuse(reason: string, remedy: string, status: number) {
+  return NextResponse.json({ ok: false, reason, remedy }, { status });
+}
+
+export async function POST(request: Request) {
+  const supabase = await getServerClient();
+  if (!supabase) {
+    return refuse(
+      "This deployment has no database configured.",
+      "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then restart the server.",
+      503
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return refuse(
+      "Your session has expired.",
+      "Sign in again and re-upload. The file was not stored.",
+      401
+    );
+  }
+
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return refuse(
+      "The upload was cut off before it finished.",
+      "Check your connection and try again.",
+      400
+    );
+  }
+
+  const candidate = form.get("file");
+  if (!(candidate instanceof File)) {
+    return refuse(
+      "No file was attached to the request.",
+      "Choose a PDF or DOCX and try again.",
+      400
+    );
+  }
+
+  const validation = validateResumeFile(candidate);
+  if (!validation.ok) {
+    return refuse(validation.reason, validation.remedy, 415);
+  }
+
+  const { file, kind } = validation;
+
+  /*
+    The path must start with the owner's uid. The Storage policies in
+    0006_storage.sql key on (storage.foldername(name))[1], so a path that
+    does not begin with the uid is rejected by Postgres, not by this code.
+  */
+  const documentId = crypto.randomUUID();
+  const storagePath = `${user.id}/${documentId}.${kind}`;
+
+  const upload = await supabase.storage.from(BUCKET).upload(storagePath, file, {
+    contentType: kind === "pdf" ? "application/pdf" : file.type || undefined,
+    upsert: false,
+  });
+
+  if (upload.error) {
+    const message = upload.error.message.toLowerCase();
+    if (message.includes("bucket") && message.includes("not found")) {
+      return refuse(
+        "The storage bucket does not exist yet.",
+        "Run supabase db reset so 0006_storage.sql creates the resumes bucket.",
+        500
+      );
+    }
+    return refuse(
+      "The file could not be stored.",
+      `${upload.error.message}. Try again in a moment.`,
+      502
+    );
+  }
+
+  const insert = await supabase
+    .from("documents")
+    .insert({
+      id: documentId,
+      user_id: user.id,
+      storage_path: storagePath,
+      kind,
+    })
+    .select("id")
+    .single();
+
+  if (insert.error) {
+    // Do not leave the object behind with no row pointing at it.
+    await supabase.storage.from(BUCKET).remove([storagePath]);
+    return refuse(
+      "The file uploaded but could not be recorded.",
+      `${insert.error.message}. Nothing was kept, so it is safe to try again.`,
+      502
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    documentId: insert.data.id,
+    filename: file.name,
+  });
+}

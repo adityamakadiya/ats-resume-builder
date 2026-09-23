@@ -43,6 +43,14 @@ export type ResumeListItem = ResumeRow & {
   score: number | null;
 };
 
+export type DocumentRow = {
+  id: string;
+  user_id: string;
+  storage_path: string | null;
+  kind: "pdf" | "docx" | "text";
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -50,7 +58,18 @@ export type Database = {
         Row: ResumeRow;
         Insert: Partial<ResumeRow> & { user_id: string };
         Update: Partial<ResumeRow>;
+        Relationships: [];
+      };
+      documents: {
+        Row: DocumentRow;
+        Insert: Partial<DocumentRow> & { user_id: string; kind: DocumentRow["kind"] };
+        Update: Partial<DocumentRow>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 };

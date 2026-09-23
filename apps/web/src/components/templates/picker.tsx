@@ -87,10 +87,11 @@ export function TemplatePicker({
         >
           {FILTERS.map((entry) => {
             const active = filter === entry.id;
+            const category = entry.id;
             const count =
-              entry.id === "all"
+              category === "all"
                 ? templates.length
-                : templates.filter((template) => template.categories.includes(entry.id))
+                : templates.filter((template) => template.categories.includes(category))
                     .length;
             return (
               <button

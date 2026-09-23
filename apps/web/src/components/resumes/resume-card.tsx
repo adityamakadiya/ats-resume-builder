@@ -83,10 +83,13 @@ export function ResumeCard({ resume }: { resume: ResumeListItem }) {
         <div className="shrink-0 pt-0.5 text-right">
           {resume.score === null ? (
             <>
-              <p className="font-mono text-2xl leading-none text-rule-strong" aria-hidden="true">
-                &mdash;
-              </p>
-              <p className="mt-1.5 max-w-[9rem] text-[0.6875rem] leading-snug text-ink-faint">
+              {/* A drawn rule, not a dash character: the copy rules here
+                  forbid em dashes, and a glyph would be one. */}
+              <span
+                aria-hidden="true"
+                className="mx-auto block h-0.5 w-6 bg-rule-strong"
+              />
+              <p className="mt-2.5 max-w-[9rem] text-[0.6875rem] leading-snug text-ink-faint">
                 Not scored yet
               </p>
             </>

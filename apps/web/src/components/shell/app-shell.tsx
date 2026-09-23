@@ -22,6 +22,7 @@ import { Wordmark } from "@/components/brand";
 import { PHASE_TWO_NAV, PRIMARY_NAV, type NavItem } from "./nav-items";
 import { UserMenu } from "./user-menu";
 import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/link-button";
 import {
   Sheet,
   SheetContent,
@@ -137,14 +138,15 @@ function SidebarBody({
       </div>
 
       <div className="px-3 pb-4">
-        <Button
-          render={<Link href="/start" onClick={onNavigate} />}
+        <LinkButton
           size="lg"
           className="w-full justify-start gap-2 rounded-xs bg-stamp text-paper-raised hover:bg-stamp/90"
+          href="/start"
+          onClick={onNavigate}
         >
           <Plus aria-hidden="true" />
           New resume
-        </Button>
+        </LinkButton>
       </div>
 
       <nav aria-label="Main" className="flex-1 overflow-y-auto px-3">
