@@ -30,6 +30,17 @@ import type { ResumeDoc } from "@ats/templates";
 import { getServerClient } from "@/lib/supabase/server";
 import { factsToDocument } from "./ingest";
 
+/*
+  One line per resolution, because this decides whether a candidate is shown
+  their own resume or a stranger's, and getting it wrong is silent: the page
+  renders perfectly either way and only the name gives it away. When someone
+  reports "it is showing the sample", this says which of the six misses it
+  was without needing a debugger against a live session.
+*/
+function report(documentId: string, outcome: string): void {
+  console.info(`[preview] ${documentId}: ${outcome}`);
+}
+
 export async function loadPreviewDoc(documentId?: string): Promise<ResumeDoc | null> {
   if (!documentId) return null;
 
@@ -53,17 +64,31 @@ export async function loadPreviewDoc(documentId?: string): Promise<ResumeDoc | n
 
     // 42703 (undefined column) and 42P01 (undefined table) both land here
     // when the migrations are not applied. Neither is the user's problem.
-    if (error || !data) return null;
+    if (error || !data) {
+      report(documentId, error ? `select failed: ${error.message}` : "no such document");
+      return null;
+    }
 
     const factsJson = (data as Record<string, unknown>).facts_json;
-    if (!factsJson || typeof factsJson !== "object") return null;
+    if (!factsJson || typeof factsJson !== "object") {
+      report(documentId, "facts_json is null; the upload was never parsed");
+      return null;
+    }
 
     const facts = factsJson as ResumeFacts;
 
     // An extraction with no name and no history did not work, whatever the
     // service reported. The sample is at least honest about being a sample.
-    if (!facts.contact?.name && (facts.experience ?? []).length === 0) return null;
+    if (!facts.contact?.name && (facts.experience ?? []).length === 0) {
+      report(documentId, "the extraction has neither a name nor any history");
+      return null;
+    }
 
+    report(
+      documentId,
+      `resolved to "${facts.contact?.name || "(no name)"}", ` +
+        `${(facts.experience ?? []).length} roles`
+    );
     return factsToDocument(facts);
   } catch (error) {
     console.warn("[preview] could not read the extraction:", error);
