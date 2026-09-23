@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TailoredResumeSchema, type TailoredResume } from '../src/schema/index.js';
 import { REPLACEMENTS, cleanText, containsTells, sanitize } from '../src/sanitize/index.js';
+import { deepClone } from '../src/patch/index.js';
 
 describe('cleanText', () => {
   it.each([
@@ -160,7 +161,7 @@ describe('sanitize', () => {
 
   it('does not mutate the input, unlike the Python', () => {
     const before = dirty();
-    const snapshot = structuredClone(before);
+    const snapshot = deepClone(before);
     sanitize(before);
     expect(before).toEqual(snapshot);
   });

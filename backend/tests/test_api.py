@@ -327,3 +327,131 @@ def test_adding_a_skill_moves_the_score(client, tailored, facts):
     ).json()
 
     assert after["sub_scores"]["keyword_match"] > before["sub_scores"]["keyword_match"]
+
+
+# --------------------------------------------------------------------------- #
+# The document service surface                                                 #
+# --------------------------------------------------------------------------- #
+#
+# These two endpoints are what survives when the pipeline moves to the web app.
+# Everything that touches a binary format or a browser stays here; the
+# orchestration leaves. So they are the contract, and they get tested as one.
+
+SMALL_PAGE = (
+    "<!doctype html><html><head><style>@page{size:A4;margin:0}"
+    "body{margin:0;font-family:Helvetica,Arial,sans-serif}"
+    ".p{padding:.6in}</style></head><body><div class='p'>"
+    "<h1>Rohan Iyer</h1><p>Backend Engineer, Pune</p>"
+    "<ul><li>Built settlement APIs in Node.js</li></ul>"
+    "</div></body></html>"
+)
+
+
+@pytest.mark.slow
+def test_html_render_returns_a_pdf_with_measured_headers(client):
+    response = client.post(
+        "/api/render/html", json={"html": SMALL_PAGE, "filename": "rohan.pdf"}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+    assert 'filename="rohan.pdf"' in response.headers["content-disposition"]
+    # The page count is measured after the fact rather than predicted, because
+    # the density ladder above this needs an answer it can act on.
+    assert response.headers["x-render-pages"] == "1"
+    assert response.headers["x-render-fitted"] == "1"
+
+
+def test_html_render_refuses_an_empty_document(client):
+    assert client.post("/api/render/html", json={"html": ""}).status_code == 422
+
+
+def test_html_render_caps_the_payload(client):
+    """A resume is a few tens of kilobytes. Four megabytes is a mistake."""
+    huge = "<p>x</p>" * 600_000
+    assert client.post("/api/render/html", json={"html": huge}).status_code == 422
+
+
+@pytest.mark.slow
+def test_a_filename_cannot_inject_a_header(client):
+    """Content-Disposition is a header, so a newline here is response splitting."""
+    response = client.post(
+        "/api/render/html",
+        json={"html": SMALL_PAGE, "filename": "ok\r\nX-Evil: yes"},
+    )
+
+    assert response.status_code == 200
+    assert "X-Evil" not in response.headers
+    assert "\n" not in response.headers["content-disposition"]
+
+
+def test_guard_passes_an_honest_rewrite(client, facts, tailored):
+    response = client.post(
+        "/api/guard",
+        json={
+            "tailored": tailored.model_dump(mode="json"),
+            "facts": facts.model_dump(mode="json"),
+            "raw_resume_text": "",
+            "entailment": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["passed"] is True
+    assert body["error_count"] == 0
+
+
+def test_guard_catches_a_relocated_figure(client, facts, tailored):
+    """The endpoint carries the rule, not just the call.
+
+    45% belongs to the caching work in E1.B2. Claiming it for the API work in
+    E1.B1 is the fabrication this whole product exists to refuse, and it has
+    to be refused over HTTP as well as in process.
+    """
+    draft = tailored.model_dump(mode="json")
+    draft["experience"][0]["bullets"].append(
+        {
+            "text": "Shipped settlement endpoints, lifting throughput by 45%.",
+            "source_ids": ["E1.B1"],
+            "keywords": [],
+        }
+    )
+
+    response = client.post(
+        "/api/guard",
+        json={
+            "tailored": draft,
+            "facts": facts.model_dump(mode="json"),
+            "raw_resume_text": "",
+            "entailment": False,
+        },
+    )
+
+    body = response.json()
+    assert body["passed"] is False
+    assert "UNSOURCED_METRIC" in {v["code"] for v in body["violations"]}
+
+
+def test_guard_does_not_call_a_model_unless_asked(client, facts, tailored, monkeypatch):
+    """Entailment costs a call. The default must be free.
+
+    The caller knows whether it is verifying a finished draft or a single line
+    somebody just typed, and only one of those is worth paying for.
+    """
+    from atsresume.truth import entailment
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("entailment ran without being asked for")
+
+    monkeypatch.setattr(entailment, "structured", explode)
+
+    response = client.post(
+        "/api/guard",
+        json={
+            "tailored": tailored.model_dump(mode="json"),
+            "facts": facts.model_dump(mode="json"),
+        },
+    )
+    assert response.status_code == 200

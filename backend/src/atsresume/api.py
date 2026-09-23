@@ -44,6 +44,7 @@ from .pipeline import (
     strategize,
     tailor_resume,
 )
+from .render.html_pdf import HtmlRenderError, render_html_to_pdf
 from .render.rendercv_adapter import THEMES, RenderError, render_pdf
 
 logger = logging.getLogger(__name__)
@@ -462,6 +463,79 @@ async def render(request: RenderRequest) -> Response:
     return Response(content=result.pdf, media_type="application/pdf", headers=headers)
 
 
+class HtmlRenderRequest(BaseModel):
+    """The editor's own HTML, on its way to a printer.
+
+    The document arrives already rendered because that is the entire point: the
+    preview a candidate has been editing IS the page that gets printed, so the
+    two cannot drift. A server that rebuilt the HTML from a model here would be
+    reintroducing the second implementation this design exists to remove.
+    """
+
+    html: str = Field(min_length=1, max_length=4_000_000)
+    filename: str = Field(default="resume.pdf", max_length=200)
+
+
+@app.post(
+    "/api/render/html",
+    responses={200: {"content": {"application/pdf": {}}, "description": "The rendered resume"}},
+)
+async def render_html(request: HtmlRenderRequest) -> Response:
+    """Primary render path: the editor's HTML, printed by a real browser."""
+    result = await run_in_threadpool(
+        render_html_to_pdf, request.html, filename=request.filename
+    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{result.filename}"',
+        "X-Render-Warnings": " | ".join(result.warnings) if result.warnings else "",
+        "X-Render-Pages": str(result.pages),
+        "X-Render-Fitted": "1" if result.fitted else "0",
+        "X-Render-Ms": str(result.ms),
+    }
+    return Response(content=result.pdf, media_type="application/pdf", headers=headers)
+
+
+class GuardRequest(BaseModel):
+    """Verification as a service, so the orchestrator can live elsewhere.
+
+    The pipeline is moving to the web app, but the guard stays here: it is
+    hundreds of lines of carefully tested rules over a technology vocabulary,
+    and a second implementation of it in another language would be a second
+    set of rules that disagree under pressure.
+
+    Entailment is opt-in per call rather than always on. The token checks are
+    free; entailment costs a model call, and the caller knows whether it is
+    verifying a finished draft or a single line a user just typed.
+    """
+
+    tailored: TailoredResume
+    facts: ResumeFacts
+    raw_resume_text: str = ""
+    jd_terms: list[str] = Field(default_factory=list)
+    entailment: bool = False
+
+
+@app.post("/api/guard", response_model=TruthReport)
+async def guard(request: GuardRequest) -> TruthReport:
+    """Every rule that decides whether a line can be traced to the resume."""
+    from .truth.entailment import check_entailment
+    from .truth.guard import entailment_pairs, merge_violations, run_truth_guard
+
+    report = await run_in_threadpool(
+        run_truth_guard,
+        request.tailored,
+        request.facts,
+        request.raw_resume_text,
+        request.jd_terms,
+    )
+    if not request.entailment:
+        return report
+
+    pairs = entailment_pairs(request.tailored, request.facts)
+    extra = await run_in_threadpool(check_entailment, pairs)
+    return merge_violations(report, extra)
+
+
 # --------------------------------------------------------------------------- #
 # Error handling                                                               #
 # --------------------------------------------------------------------------- #
@@ -482,6 +556,11 @@ async def _jd_error(_request, exc: JdFetchError) -> Response:
 
 @app.exception_handler(RenderError)
 async def _render_error(_request, exc: RenderError) -> Response:
+    return _json_error(422, str(exc))
+
+
+@app.exception_handler(HtmlRenderError)
+async def _html_render_error(_request, exc: HtmlRenderError) -> Response:
     return _json_error(422, str(exc))
 
 

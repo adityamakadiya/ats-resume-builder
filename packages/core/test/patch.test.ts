@@ -10,6 +10,7 @@ import {
   resolvePointer,
   validateOps,
   type Op,
+  deepClone,
 } from '../src/patch/index.js';
 
 function doc(): TailoredResume {
@@ -70,7 +71,7 @@ describe('pointer plumbing', () => {
 describe('applyPatch', () => {
   it('replaces a leaf without mutating the input', () => {
     const before = doc();
-    const snapshot = structuredClone(before);
+    const snapshot = deepClone(before);
     const after = applyPatch(before, [{ op: 'replace', path: B0, value: 'Added a partial index.' }]);
 
     expect(after.experience[0]!.bullets[0]!.text).toBe('Added a partial index.');
@@ -177,7 +178,7 @@ describe('invertPatch round-trips', () => {
 
   it.each(cases)('%s', (_name, ops) => {
     const original = doc();
-    const snapshot = structuredClone(original);
+    const snapshot = deepClone(original);
 
     const patched = applyPatch(original, ops);
     const inverse = invertPatch(original, ops);
@@ -308,7 +309,7 @@ describe('validateOps', () => {
 
   it('never mutates the document it is checking', () => {
     const d = doc();
-    const snapshot = structuredClone(d);
+    const snapshot = deepClone(d);
     validateOps(d, [
       { op: 'replace', path: B0, value: 'changed' },
       { op: 'remove', path: '/experience/0/bullets/1' },

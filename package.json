@@ -1,0 +1,14 @@
+{
+  "name": "ats-resume-builder",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "test": "npm run test --workspaces --if-present",
+    "test:py": "cd backend && .venv/bin/python -m pytest -q",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "fixtures:check": "cd backend && .venv/bin/python scripts/export_score_fixtures.py --check && cd ../packages/templates && npx tsx scripts/emit-html.mjs --check"
+  }
+}

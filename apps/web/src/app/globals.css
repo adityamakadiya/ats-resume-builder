@@ -1,19 +1,36 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 /*
+  ===========================================================================
   Editorial forensic instrument.
 
-  The product's whole claim is that it verifies rather than embellishes, so the
+  The product's whole claim is that it traces rather than embellishes, so the
   interface is set like a laboratory report: warm paper, ink type, hairline
   rules instead of floating cards, and every number in mono so it reads as
-  measured rather than asserted. The accent is a stamp red — the mark a
+  measured rather than asserted. The accent is a stamp red, the mark a
   document gets when someone has actually checked it.
 
-  Committed to light. A paper metaphor in a dark theme is a different design,
-  and doing both halfway would blunt the one this needs to be.
+  Light is the default and the canonical theme. Dark is not an inversion of
+  it: paper becomes the archive room rather than a glowing sheet, the grain
+  stays, and the stamp lifts in chroma so it survives on a dark ground.
+  Both are driven by prefers-color-scheme. A `.dark` / `.light` class on
+  <html> overrides the query for anyone who wires up a manual switch later.
+
+  shadcn/ui ships its own semantic token names. Rather than run two palettes
+  side by side, every shadcn token below is an alias onto a paper token, so a
+  <Button> and a hand-written rule cannot drift apart.
+  ===========================================================================
 */
 
+@custom-variant dark (&:where(.dark, .dark *, :root:not(.light) *):where(*));
+
+/* -------------------------------------------------------------- light -- */
+
 :root {
+  color-scheme: light;
+
   --paper: #f7f4ee;
   --paper-raised: #fffdf9;
   --paper-sunk: #efeae1;
@@ -25,11 +42,124 @@
 
   --stamp: #b03a1f;
   --stamp-soft: #f3e2dc;
-  --verified: #2f6b46;
-  --verified-soft: #e2ece5;
+  --traced: #2f6b46;
+  --traced-soft: #e2ece5;
   --caution: #8a6117;
   --caution-soft: #f5ecd8;
+
+  --grain: var(--rule);
+  --grain-opacity: 1;
+
+  /* shadcn semantic aliases */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper-raised);
+  --secondary: var(--paper-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-sunk);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--stamp-soft);
+  --accent-foreground: var(--stamp);
+  --destructive: var(--stamp);
+  --destructive-foreground: var(--paper-raised);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--stamp);
+  --radius: 0.25rem;
+
+  --sidebar: var(--paper-sunk);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--stamp);
+  --sidebar-primary-foreground: var(--paper-raised);
+  --sidebar-accent: var(--paper-raised);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--stamp);
+
+  --chart-1: var(--stamp);
+  --chart-2: var(--traced);
+  --chart-3: var(--caution);
+  --chart-4: var(--ink-muted);
+  --chart-5: var(--rule-strong);
 }
+
+/* --------------------------------------------------------------- dark -- */
+
+/*
+  The same document seen in an archive room rather than on a desk. Warm
+  charcoal, never #000: pure black kills the paper metaphor and blooms on
+  OLED. The stamp gains lightness and loses a little chroma so it stays a
+  stamp and does not become a neon.
+*/
+@mixin-placeholder {
+}
+
+:root:not(.light) {
+  @media (prefers-color-scheme: dark) {
+    color-scheme: dark;
+
+    --paper: #131210;
+    --paper-raised: #1c1a17;
+    --paper-sunk: #0d0c0a;
+    --ink: #f1ece2;
+    --ink-muted: #a79e8e;
+    --ink-faint: #786f62;
+    --rule: #302c26;
+    --rule-strong: #4a443b;
+
+    --stamp: #e26a4c;
+    --stamp-soft: #3a211a;
+    --traced: #6fbf8e;
+    --traced-soft: #16281d;
+    --caution: #d8a94e;
+    --caution-soft: #2d2415;
+
+    --grain: #ffffff;
+    --grain-opacity: 0.045;
+
+    --primary: var(--ink);
+    --primary-foreground: var(--paper-sunk);
+    --destructive-foreground: var(--paper-sunk);
+    --sidebar-primary-foreground: var(--paper-sunk);
+    --sidebar-accent: var(--paper-raised);
+  }
+}
+
+.dark {
+  color-scheme: dark;
+
+  --paper: #131210;
+  --paper-raised: #1c1a17;
+  --paper-sunk: #0d0c0a;
+  --ink: #f1ece2;
+  --ink-muted: #a79e8e;
+  --ink-faint: #786f62;
+  --rule: #302c26;
+  --rule-strong: #4a443b;
+
+  --stamp: #e26a4c;
+  --stamp-soft: #3a211a;
+  --traced: #6fbf8e;
+  --traced-soft: #16281d;
+  --caution: #d8a94e;
+  --caution-soft: #2d2415;
+
+  --grain: #ffffff;
+  --grain-opacity: 0.045;
+
+  --primary: var(--ink);
+  --primary-foreground: var(--paper-sunk);
+  --destructive-foreground: var(--paper-sunk);
+  --sidebar-primary-foreground: var(--paper-sunk);
+  --sidebar-accent: var(--paper-raised);
+}
+
+/* ------------------------------------------------------------- theme -- */
 
 @theme inline {
   --color-paper: var(--paper);
@@ -42,35 +172,98 @@
   --color-rule-strong: var(--rule-strong);
   --color-stamp: var(--stamp);
   --color-stamp-soft: var(--stamp-soft);
-  --color-verified: var(--verified);
-  --color-verified-soft: var(--verified-soft);
+  --color-traced: var(--traced);
+  --color-traced-soft: var(--traced-soft);
   --color-caution: var(--caution);
   --color-caution-soft: var(--caution-soft);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
 
   --font-display: var(--font-instrument-serif);
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
 }
 
-html {
-  background: var(--paper);
-  color-scheme: light;
+/* --------------------------------------------------------------- base -- */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--rule);
+  }
+
+  html {
+    background: var(--paper);
+    font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    /* A faint grain keeps the paper from reading as flat. */
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--grain) calc(var(--grain-opacity) * 100%), transparent) 0.5px,
+      transparent 0.5px
+    );
+    background-size: 22px 22px;
+  }
+
+  ::selection {
+    background: var(--stamp);
+    color: var(--paper-raised);
+  }
+
+  /*
+    One focus treatment everywhere, and it is loud on purpose. Keyboard users
+    should never have to hunt for the caret on a form that decides whether
+    someone gets an interview.
+  */
+  :focus-visible {
+    outline: 2px solid var(--stamp);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  /* A faint grain keeps the paper from reading as flat #fff-adjacent. */
-  background-image: radial-gradient(var(--rule) 0.5px, transparent 0.5px);
-  background-size: 22px 22px;
-}
-
-::selection {
-  background: var(--stamp);
-  color: var(--paper-raised);
-}
+/* ---------------------------------------------------------- utilities -- */
 
 /* Section headings are set as small caps rules, the way a form labels a field. */
 .label {
@@ -83,6 +276,26 @@ body {
 
 .rule-top {
   border-top: 1px solid var(--rule);
+}
+
+/* The hairline frame that stands in for a card. */
+.sheet {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+}
+
+/*
+  Ruled paper: the horizontal hairlines an empty form has before anyone fills
+  it in. Used behind empty states so nothing ever reads as a blank void.
+*/
+.ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 27px,
+    var(--rule) 27px,
+    var(--rule) 28px
+  );
 }
 
 /* Staggered reveal: one orchestrated entrance beats scattered micro-motion. */
@@ -150,4 +363,33 @@ body {
     background-image: none;
     background-color: var(--stamp);
   }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/*
+  Template thumbnails. A template renders at A4 width and is scaled down with
+  a transform, which keeps the real typography and the real line breaks
+  instead of faking a preview with grey bars. `transform` does not affect
+  layout, so the wrapper is given the scaled height explicitly.
+*/
+.thumb-frame {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  color: #000000;
+  isolation: isolate;
+}
+
+.thumb-scale {
+  position: absolute;
+  inset: 0;
+  transform-origin: top left;
+  pointer-events: none;
+  width: 794px; /* A4 at 96dpi */
+  height: 1123px;
 }
