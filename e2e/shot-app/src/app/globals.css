@@ -64,7 +64,18 @@
      confident, pure black reads as harsh against white. */
   --ink: #0f172a;
   --ink-muted: #55627a;
-  --ink-faint: #8a94a6;
+  /*
+    4.65:1 on the sunk surface, which is the worst ground it lands on, so it
+    clears WCAG AA for body text everywhere it can appear.
+
+    It was #8a94a6, which measured 3.05:1 on white. That is a real failure
+    and not a rounding argument: it is the colour a product reaches for when
+    text is "secondary", which in practice means timestamps, counts, helper
+    lines and placeholders, all of which someone has to actually read. The
+    step down from --ink-muted is smaller now. That is the correct trade;
+    hierarchy is worth less than legibility.
+  */
+  --ink-faint: #606d84;
 
   --rule: #e3e8ef;
   --rule-strong: #cbd3e0;
@@ -73,7 +84,9 @@
      else is, so a button that looks like this can be trusted to do
      something. */
   --stamp: #2563eb;
-  --stamp-soft: #e8eefe;
+  /* Lightened from #e8eefe so --stamp on it reaches 4.73:1. A soft-filled
+     chip has to carry readable text, not merely suggest a colour. */
+  --stamp-soft: #f0f5ff;
   --stamp-strong: #1d4ed8;
 
   /* Already true, and free to use. */

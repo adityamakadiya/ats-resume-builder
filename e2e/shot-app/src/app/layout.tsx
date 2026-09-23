@@ -1,25 +1,7 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans, Instrument_Serif } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
-
-/*
-  Instrument Serif for display: high contrast, editorial, and it carries the
-  large score numeral without looking like a dashboard widget. IBM Plex Sans
-  and Mono for everything else. Plex has real drafting-table character, and
-  the mono is what makes measured values read as measured.
-
-  shadcn's init grafted Geist on here. It has been removed: two sans faces in
-  one document is a mistake, and Geist is the single most over-used typeface
-  in generated interfaces.
-*/
-
-const display = Instrument_Serif({
-  variable: "--font-instrument-serif",
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-});
 
 const sans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
@@ -43,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <a

@@ -60,8 +60,15 @@ function Fold({ title, count, children }: { title: string; count?: number; child
  */
 function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
+    /*
+      `min-h-0` only from lg up. Below that the three panels are stacked rows
+      in a scrolling column and a zero minimum lets a row collapse under its
+      own content, which clipped the score card halfway through the numeral
+      on a phone. Above lg they are side by side inside a fixed-height shell
+      and each one has to be allowed to shrink so it can scroll internally.
+    */
     <div
-      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-rule bg-paper-raised ${className}`}
+      className={`flex flex-col overflow-hidden rounded-xl border border-rule bg-paper-raised lg:min-h-0 ${className}`}
     >
       {children}
     </div>
@@ -256,7 +263,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         </Panel>
 
         {/* centre */}
-        <Panel className="min-h-[24rem] lg:min-h-0">
+        <Panel className="min-h-[26rem]">
           <ChatPanel prefill={prefill} />
         </Panel>
 

@@ -43,9 +43,14 @@ backend/.venv/
 backend/*.egg-info/
 backend/**/__pycache__/
 dist/
+e2e/.auth/
+e2e/shot-app/
+e2e/unconfigured-app/
 next-env.d.ts
 node_modules/
 npm-debug.log*
+playwright-report/
+test-results/
 tsconfig.tsbuildinfo
 yarn-debug.log*
 yarn-error.log*

@@ -551,6 +551,26 @@
 
 /* ------------------------------------------------------------ print fix -- */
 
+/*
+  The page reset, outside the print block.
+
+  It used to live only inside `@media print`, which meant the PDF was right
+  and the screen was wrong: the user agent's default 8px body margin made
+  every template 802px wide in a 794px A4 viewport, so the live preview had
+  a horizontal scrollbar that the export did not. The E2E suite caught it on
+  all nine fixtures at once, which is what a preview and its output being
+  the same document is supposed to prevent.
+
+  The background stays white here too. A template is a sheet of paper; it
+  should not pick up the product's page tint when rendered standalone.
+*/
+html:has(.rz),
+body:has(.rz) {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
 @media print {
   html,
   body {
