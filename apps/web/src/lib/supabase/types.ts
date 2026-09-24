@@ -128,25 +128,32 @@ export type FactRow = {
   created_at: string;
 };
 
+/*
+  `user_id` is not required on any Insert below.
+
+  Migration 0009_single_user.sql makes it DEFAULT app.owner_id() on every
+  table, so the honest shape is "the database fills this in". Requiring it
+  here would push every caller into naming an owner the database already
+  knows, which is exactly the duplication 0009 removed.
+*/
 export type Database = {
   public: {
     Tables: {
       resumes: {
         Row: ResumeRow;
-        Insert: Partial<ResumeRow> & { user_id: string };
+        Insert: Partial<ResumeRow>;
         Update: Partial<ResumeRow>;
         Relationships: [];
       };
       documents: {
         Row: DocumentRow;
-        Insert: Partial<DocumentRow> & { user_id: string; kind: DocumentRow["kind"] };
+        Insert: Partial<DocumentRow> & { kind: DocumentRow["kind"] };
         Update: Partial<DocumentRow>;
         Relationships: [];
       };
       facts: {
         Row: FactRow;
         Insert: Partial<FactRow> & {
-          user_id: string;
           fact_key: string;
           text: string;
           origin: FactRow["origin"];

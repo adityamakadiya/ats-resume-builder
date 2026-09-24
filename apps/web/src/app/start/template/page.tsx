@@ -11,9 +11,9 @@
  * and your forty-word bullets; showing an invented person's resume instead
  * makes the whole screen a decoration.
  *
- * An invented uuid still costs nothing. The read runs under RLS, so a
- * document belonging to somebody else simply does not exist, and every
- * flavour of miss lands on the same branch: the fixture, labelled.
+ * An invented uuid still costs nothing. A document id that resolves to no
+ * row is one more kind of miss, and every flavour of miss lands on the same
+ * branch: the fixture, labelled.
  */
 
 import type { Metadata } from "next";

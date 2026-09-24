@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   }
 
   const input = body.value;
-  const { userId, supabase } = entry;
+  const { supabase } = entry;
 
   return sseStream<ChatEvent>({
     signal: request.signal,
@@ -206,7 +206,6 @@ export async function POST(request: Request) {
         });
 
         await recordProposal(supabase, {
-          userId,
           resumeId: input.resumeId,
           versionId: input.versionId,
           ops: parsed.value.ops,
@@ -426,7 +425,7 @@ function parseArgs(raw: string): ParsedArgs {
  */
 async function recordProposal(
   supabase: ServerClient,
-  input: { userId: string; resumeId?: string; versionId?: string; ops: Op[] },
+  input: { resumeId?: string; versionId?: string; ops: Op[] },
 ): Promise<void> {
   if (!input.resumeId || !input.versionId) return;
 
@@ -438,7 +437,7 @@ async function recordProposal(
 
   try {
     const { error } = await (supabase as unknown as Loose).from("patches").insert({
-      user_id: input.userId,
+      // No user_id: 0009 defaults it to app.owner_id().
       resume_id: input.resumeId,
       base_version_id: input.versionId,
       ops_json: input.ops,

@@ -30,6 +30,7 @@
 
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,6 +44,25 @@ const port = process.argv[2] ?? "3101";
 
 /** Copied fresh every boot: Next needs these to be real files. */
 const COPIED = ["src"];
+
+/**
+ * Where Next actually is.
+ *
+ * npm hoists to the workspace root, so `apps/web/node_modules` can hold
+ * nothing but a vite cache, and spawning
+ * `<web>/node_modules/next/dist/bin/next` then dies with MODULE_NOT_FOUND
+ * before a single spec is collected. Resolve the binary rather than assuming
+ * where it lives.
+ *
+ * The `node_modules` symlink below still points at `apps/web/node_modules`,
+ * empty or not. Resolution walks up from `e2e/unconfigured-app` and finds
+ * the hoisted copy at the repository root either way, and pointing the link
+ * at the root instead makes Tailwind scan a gigabyte of dependencies and
+ * emit utilities generated from the bytes of a binary, which fails the CSS
+ * parse. That was tried; this comment is the receipt.
+ */
+const require = createRequire(import.meta.url);
+const NEXT_BIN = require.resolve("next/dist/bin/next", { paths: [WEB, REPO_ROOT] });
 
 /** Symlinked: large, or shared, or both. */
 const LINKED = ["node_modules", "public", "tsconfig.json", "postcss.config.mjs", "components.json"];
@@ -65,7 +85,7 @@ for (const name of LINKED) link(name);
 
 const child = spawn(
   process.execPath,
-  [join(WEB, "node_modules", "next", "dist", "bin", "next"), "dev", "--port", port],
+  [NEXT_BIN, "dev", "--port", port],
   {
     cwd: APP,
     stdio: "inherit",

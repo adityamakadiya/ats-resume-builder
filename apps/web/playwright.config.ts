@@ -5,18 +5,21 @@
  * config and the node_modules are, but every spec is in `../../e2e` because
  * tier 3 tests `packages/templates` and has nothing to do with this app.
  *
- * Five projects, three tiers:
+ * Four projects, three tiers:
  *
- *   tier1               no account, runs against a normal dev server
- *   tier1-unconfigured  no account, runs against a dev server with the
- *                       Supabase variables blanked
+ *   tier1               runs against a normal dev server
+ *   tier1-unconfigured  runs against a dev server with the Supabase
+ *                       variables blanked
  *   tier3               no server at all; file:// against the nine
  *                       pre-rendered template fixtures
- *   setup               signs in once and writes a storageState
- *   tier2               everything that needs a real session
+ *   tier2               the whole funnel, end to end, against a real
+ *                       database and a real model
  *
- * Only tier 1 and tier 3 belong in CI. Tier 2 skips itself, loudly, when
- * E2E_EMAIL and E2E_PASSWORD are not set. See ../../e2e/README.md.
+ * There used to be a fifth, `setup`, which signed in and wrote a
+ * storageState for tier 2. Authentication has been removed, so there is
+ * nothing to sign in to and no credentials to hold: tier 2 now runs for
+ * anyone. It is still out of CI because it is slow, it spends model tokens
+ * and it writes rows. See ../../e2e/README.md.
  */
 
 import { defineConfig, devices } from "@playwright/test";
@@ -42,8 +45,6 @@ const APP_URL = process.env.E2E_BASE_URL ?? `http://localhost:${APP_PORT}`;
 const UNCONFIGURED_PORT = Number(process.env.E2E_UNCONFIGURED_PORT ?? 3101);
 const UNCONFIGURED_URL = `http://localhost:${UNCONFIGURED_PORT}`;
 
-const STORAGE_STATE = join(E2E, ".auth", "user.json");
-
 /**
  * Which servers this run actually needs.
  *
@@ -65,7 +66,7 @@ function selectedProjects(): string[] {
 
 const selected = selectedProjects();
 const needs = (project: string) => selected.length === 0 || selected.includes(project);
-const needsApp = needs("tier1") || needs("setup") || needs("tier2");
+const needsApp = needs("tier1") || needs("tier2");
 const needsUnconfigured = needs("tier1-unconfigured");
 
 const webServer = [
@@ -132,32 +133,16 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: "setup",
-      testDir: join(E2E, "tier2"),
-      testMatch: /auth\.setup\.ts$/,
-      use: { ...devices["Desktop Chrome"], baseURL: APP_URL },
-    },
-    {
       name: "tier2",
       testDir: join(E2E, "tier2"),
       testMatch: /.*\.spec\.ts$/,
-      dependencies: ["setup"],
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: APP_URL,
-        /*
-          The file is read when the context is created, which is after the
-          `setup` dependency has run. `auth.setup.ts` writes it on every
-          path, including the one where it skips for want of credentials, so
-          a run without an account reports "skipped" rather than "config
-          error: storageState file not found".
-        */
-        storageState: STORAGE_STATE,
-      },
+      // No `dependencies` and no `storageState`. Both existed to carry a
+      // session into every context, and there is no session to carry.
+      use: { ...devices["Desktop Chrome"], baseURL: APP_URL },
     },
   ],
 
   webServer: webServer.length > 0 ? webServer : undefined,
 });
 
-export { APP_URL, UNCONFIGURED_URL, STORAGE_STATE };
+export { APP_URL, UNCONFIGURED_URL };

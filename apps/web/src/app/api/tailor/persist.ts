@@ -13,6 +13,10 @@
  * them, and the editor needs a stable key for the version it is showing
  * whether or not Postgres agrees that the version exists.
  *
+ * No row below carries a `user_id`. Migration 0009_single_user.sql defaults
+ * that column to app.owner_id() on every table, so sending one from here
+ * would be the application deciding an owner the database already decides.
+ *
  * The typed client in `lib/supabase/types.ts` declares only the two tables
  * another part of the app reads. Rather than widen a type someone else owns,
  * the writes below go through a deliberately untyped view of the same
@@ -24,7 +28,6 @@ import type { ServerClient } from "@/lib/supabase/server";
 
 export type PersistInput = {
   supabase: ServerClient;
-  userId: string;
   resumeId?: string;
   templateId?: string;
   jdText: string;
@@ -79,7 +82,6 @@ export async function persistRun(input: PersistInput): Promise<PersistResult> {
     const jobRow = await db
       .from("jobs")
       .insert({
-        user_id: input.userId,
         source_url: input.jdUrl ?? null,
         jd_text: input.jdText,
         jd_source: input.sourceNote,
@@ -100,7 +102,6 @@ export async function persistRun(input: PersistInput): Promise<PersistResult> {
       const resumeRow = await db
         .from("resumes")
         .insert({
-          user_id: input.userId,
           title: company ? `${jobTitle} - ${company}` : jobTitle,
           template_id: input.templateId ?? "default",
           job_id: jobId,
@@ -118,7 +119,6 @@ export async function persistRun(input: PersistInput): Promise<PersistResult> {
     const versionRow = await db
       .from("resume_versions")
       .insert({
-        user_id: input.userId,
         resume_id: resumeId,
         doc_json: input.tailored,
         created_by: "ai_tailor",
@@ -147,7 +147,6 @@ export async function persistRun(input: PersistInput): Promise<PersistResult> {
 
     const analysis = await db.from("resume_jobs").upsert(
       {
-        user_id: input.userId,
         resume_id: resumeId,
         job_id: jobId,
         gaps_json: input.gaps,

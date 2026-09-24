@@ -24,7 +24,6 @@ import { useEffect, useState } from "react";
 import { Menu, Plus } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { PHASE_TWO_NAV, PRIMARY_NAV, type NavItem } from "./nav-items";
-import { UserMenu } from "./user-menu";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/link-button";
 import {
@@ -37,7 +36,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type AppShellProps = {
-  email: string | null;
   children: React.ReactNode;
 };
 
@@ -109,11 +107,9 @@ function NavRow({
 
 function SidebarBody({
   pathname,
-  email,
   onNavigate,
 }: {
   pathname: string;
-  email: string | null;
   onNavigate?: () => void;
 }) {
   return (
@@ -166,14 +162,24 @@ function SidebarBody({
         </ul>
       </nav>
 
-      <div className="border-t border-rule p-2">
-        <UserMenu email={email} />
+      {/*
+        What used to be the account menu. There are no accounts and no way to
+        sign out of one, so this is a label and nothing else: no trigger, no
+        menu, no dead "Sign out" item pretending there is a session to end.
+      */}
+      <div className="border-t border-rule px-4 py-3.5">
+        <p className="text-[0.6875rem] font-semibold tracking-[0.08em] text-ink-muted uppercase">
+          This install
+        </p>
+        <p className="mt-1 text-[0.8125rem] leading-snug text-ink-muted">
+          Single user. Everything here belongs to whoever opens it.
+        </p>
       </div>
     </div>
   );
 }
 
-export function AppShell({ email, children }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -186,7 +192,7 @@ export function AppShell({ email, children }: AppShellProps) {
     <div className="flex min-h-full flex-1 flex-col lg:flex-row">
       {/* Desktop rail */}
       <aside className="hidden w-64 shrink-0 border-r border-rule bg-paper-raised lg:sticky lg:top-0 lg:block lg:h-screen">
-        <SidebarBody pathname={pathname} email={email} />
+        <SidebarBody pathname={pathname} />
       </aside>
 
       {/* Mobile bar */}
@@ -207,11 +213,7 @@ export function AppShell({ email, children }: AppShellProps) {
             <SheetDescription className="sr-only">
               Move between the dashboard, your resumes and your account.
             </SheetDescription>
-            <SidebarBody
-              pathname={pathname}
-              email={email}
-              onNavigate={() => setOpen(false)}
-            />
+            <SidebarBody pathname={pathname} onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
 

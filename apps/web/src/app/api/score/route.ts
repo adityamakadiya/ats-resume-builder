@@ -11,9 +11,10 @@
  * the tailor run. A route that asked a model for a score could not promise
  * that, and could not answer in the time between two keystrokes.
  *
- * It still authenticates, because an unauthenticated scoring endpoint is a
- * free CPU-burning endpoint. That is the only I/O on the path, and it is the
- * platform's cached session check rather than a query of ours.
+ * It no longer authenticates, because there is nobody to authenticate. What
+ * stops it being a free CPU-burning endpoint is the rate limit in `gate()`,
+ * which is in-process arithmetic rather than I/O, so the path to an answer
+ * now touches nothing at all.
  *
  * Deliberately NOT streaming. There is nothing to stream: the answer exists
  * in a few milliseconds, and an SSE frame around it would cost more than the

@@ -19,9 +19,11 @@
  */
 
 import { NextResponse } from "next/server";
+import { OWNER_ID } from "@/lib/supabase/config";
 import { getServerClient } from "@/lib/supabase/server";
 import { validateResumeFile } from "@/components/upload/validate";
 import { IngestError, factRows, parseResumeFile } from "@/lib/editor/ingest";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const BUCKET = "resumes";
 
@@ -36,17 +38,6 @@ export async function POST(request: Request) {
       "This deployment has no database configured.",
       "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then restart the server.",
       503
-    );
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return refuse(
-      "Your session has expired.",
-      "Sign in again and re-upload. The file was not stored.",
-      401
     );
   }
 
@@ -78,12 +69,14 @@ export async function POST(request: Request) {
   const { file, kind } = validation;
 
   /*
-    The path must start with the owner's uid. The Storage policies in
-    0006_storage.sql key on (storage.foldername(name))[1], so a path that
-    does not begin with the uid is rejected by Postgres, not by this code.
+    Two segments, still. The policies in 0006_storage.sql that keyed the
+    first one on the caller's uid were replaced in 0009 by a single rule over
+    the whole bucket, so nothing rejects a flat path any more. The prefix is
+    kept because the objects are easier to find, list and expire under one,
+    and OWNER_ID is what the uid used to be.
   */
   const documentId = crypto.randomUUID();
-  const storagePath = `${user.id}/${documentId}.${kind}`;
+  const storagePath = `${OWNER_ID}/${documentId}.${kind}`;
 
   const upload = await supabase.storage.from(BUCKET).upload(storagePath, file, {
     contentType: kind === "pdf" ? "application/pdf" : file.type || undefined,
@@ -104,18 +97,25 @@ export async function POST(request: Request) {
         500
       );
     }
-    return refuse(
-      "The file could not be stored.",
-      `${upload.error.message}. Try again in a moment.`,
-      502
+    /*
+      Storage has its own policies, and after 0009 removed authentication
+      the RLS refusal here means the same thing it means on a table: the
+      migration has not been run. The raw message talks about security,
+      which sends the reader looking for a permissions setting that does
+      not exist.
+    */
+    const described = describeDbError(
+      { code: /row-level security/i.test(upload.error.message) ? "42501" : "", message: upload.error.message },
+      "Storing the file"
     );
+    return refuse(described.reason, described.remedy, described.status);
   }
 
   const insert = await supabase
     .from("documents")
     .insert({
       id: documentId,
-      user_id: user.id,
+      // No user_id: migration 0009 defaults it to app.owner_id().
       storage_path: storagePath,
       kind,
     })
@@ -125,10 +125,8 @@ export async function POST(request: Request) {
   if (insert.error) {
     // Do not leave the object behind with no row pointing at it.
     await supabase.storage.from(BUCKET).remove([storagePath]);
-    return refuse(
-      "The file uploaded but could not be recorded.",
-      `${insert.error.message}. Nothing was kept, so it is safe to try again.`,
-      502
+    const described = describeDbError(insert.error, "Recording the upload");
+    return refuse(described.reason, described.remedy, described.status
     );
   }
 
@@ -208,7 +206,7 @@ export async function POST(request: Request) {
 
     // The ledger. origin 'document' marks these as things the uploaded file
     // actually says, which is the only kind of fact a rewrite may cite.
-    const rows = factRows(parsed.facts, user.id, documentId);
+    const rows = factRows(parsed.facts, documentId);
     if (rows.length > 0) {
       const { error: factsError } = await supabase.from("facts").insert(rows);
       if (factsError) {

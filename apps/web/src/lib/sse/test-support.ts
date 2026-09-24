@@ -109,16 +109,17 @@ export function modelJson(payload: unknown) {
   };
 }
 
-export type FakeUser = { id: string } | null;
-
 /**
- * A Supabase client whose auth works and whose tables do not.
+ * A Supabase client whose tables do not exist.
  *
  * That is the deployment as it actually stands: no schema applied. Every
  * route is expected to return its result anyway, so this is the default
  * fixture rather than a special case.
+ *
+ * It used to carry an `auth.getUser()` stub as well, and take a user to hand
+ * back from it. Nothing calls auth any more, so there is nobody to fake.
  */
-export function unmigratedSupabase(user: FakeUser) {
+export function unmigratedSupabase() {
   const missing = { message: 'relation "public.resumes" does not exist' };
 
   const table = {
@@ -131,8 +132,5 @@ export function unmigratedSupabase(user: FakeUser) {
     select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: missing }) }) }),
   };
 
-  return {
-    auth: { getUser: async () => ({ data: { user }, error: null }) },
-    from: () => table,
-  };
+  return { from: () => table };
 }

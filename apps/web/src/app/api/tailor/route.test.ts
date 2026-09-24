@@ -47,7 +47,6 @@ vi.mock("openai", () => {
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: async () => supabaseState.client,
-  getCurrentUser: async () => null,
 }));
 
 const { POST } = await import("./route");
@@ -140,7 +139,7 @@ beforeEach(() => {
   setCacheStore(freshCache());
   resetRateLimits();
   process.env.OPENAI_API_KEY = "test-key";
-  supabaseState.client = unmigratedSupabase({ id: "user-1" });
+  supabaseState.client = unmigratedSupabase();
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -346,9 +345,25 @@ describe("POST /api/tailor", () => {
     expect((await response.json()).reason).toMatch(/job description/i);
   });
 
-  it("401s an expired session", async () => {
-    supabaseState.client = unmigratedSupabase(null);
+  it("runs for a caller with no session, because there is no such thing", async () => {
+    // This used to be a 401. Nothing signs in now, so the request that used
+    // to be turned away is the only shape of request there is.
+    stubPipeline();
+    stubFetch(guardPasses);
+
     const response = await POST(post({ resumeText: resume("anon"), jdText: "x" }));
-    expect(response.status).toBe(401);
+
+    expect(response.status).toBe(200);
+  });
+
+  it("still refuses when Supabase is not configured, naming both variables", async () => {
+    supabaseState.client = null;
+
+    const response = await POST(post({ resumeText: resume("noenv"), jdText: "x" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   });
 });

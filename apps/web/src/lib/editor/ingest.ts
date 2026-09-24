@@ -233,13 +233,13 @@ export function factsToDocument(facts: ResumeFacts): ResumeDoc {
  * and can be cited by a rewrite. Facts the candidate later tells us in chat
  * arrive as `attested`, and the difference is what lets the guard accept a
  * number the resume never printed without accepting one nobody ever said.
+ *
+ * No `user_id`: migration 0009 defaults it to app.owner_id().
  */
 export function factRows(
   facts: ResumeFacts,
-  userId: string,
   documentId: string,
 ): Array<{
-  user_id: string;
   document_id: string;
   fact_key: string;
   text: string;
@@ -250,7 +250,6 @@ export function factRows(
   const push = (key: string, text: string, technologies: string[] = []) => {
     if (!key || !text.trim()) return;
     rows.push({
-      user_id: userId,
       document_id: documentId,
       fact_key: key,
       text,

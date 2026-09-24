@@ -11,8 +11,8 @@ import { cn } from "cn"
   refusal red, used for the handful of actions that remove something.
 
   Heights are set here rather than patched at every call site: `lg` is 44px
-  because that is the smallest thing a thumb hits reliably, and the sign in
-  button is the most important 44px in the product.
+  because that is the smallest thing a thumb hits reliably, and the upload
+  button on /start is the most important 44px in the product.
 */
 
 const buttonVariants = cva(

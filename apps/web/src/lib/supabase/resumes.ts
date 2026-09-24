@@ -1,10 +1,10 @@
 /**
  * Reading the resume list.
  *
- * A read, so it goes straight to Postgres under RLS. There is no `where
- * user_id = ...` below and there should not be: the policy in
- * 0002_rls.sql is the filter, and adding a second one in application code
- * would create a place for the two to disagree.
+ * A read, so it goes straight to Postgres. There is no `where user_id = ...`
+ * below and there should not be: after 0009_single_user.sql every row belongs
+ * to the one owner, so a filter here would be a tautology that only creates a
+ * place for the application and the database to disagree.
  *
  * The score is joined from `resume_jobs.report_json`, which holds the
  * backend's AtsReport. `overall` is computed by formula in
@@ -13,7 +13,7 @@
  *
  * Nothing here throws. Every caller is a screen, and a screen has to render
  * something; a thrown error produces a boundary, and a boundary cannot tell
- * the user whether the problem was their session, the network or the schema.
+ * the user whether the problem was the network or the schema.
  */
 
 import { getServerClient } from "./server";
@@ -21,7 +21,6 @@ import type { ResumeListItem } from "./types";
 
 export type ResumesResult =
   | { state: "unconfigured" }
-  | { state: "signed-out" }
   | { state: "failed"; reason: string; remedy: string }
   | { state: "ok"; resumes: ResumeListItem[] };
 
@@ -60,18 +59,19 @@ export async function listResumes(): Promise<ResumesResult> {
   const supabase = await getServerClient();
   if (!supabase) return { state: "unconfigured" };
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { state: "signed-out" };
-
   const { data, error } = await supabase
     .from("resumes")
     .select(
       // source_document_id rides along so a card can name the file it came
       // from, and so a resume whose upload was deleted can say so rather
       // than looking identical to one that never had an upload.
-      "id, title, template_id, status, job_id, source_document_id, created_at, updated_at, jobs(title, company), resume_jobs(report_json)"
+      // `jobs!resumes_job_id_fkey` names the relationship on purpose.
+      // 0004 added a composite (job_id, user_id) key beside the original
+      // single-column one, so there are two foreign keys between these two
+      // tables and PostgREST refuses to guess which to embed through. The
+      // error it returns ("more than one relationship was found") reads like
+      // a schema fault; it is really a request that has to be specific.
+      "id, title, template_id, status, job_id, source_document_id, created_at, updated_at, jobs!resumes_job_id_fkey(title, company), resume_jobs(report_json)"
     )
     .order("updated_at", { ascending: false })
     .limit(200);

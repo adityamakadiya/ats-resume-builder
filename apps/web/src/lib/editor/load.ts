@@ -165,7 +165,7 @@ async function hydrateFromDocument(
     .from("resume_versions")
     .insert({
       resume_id: resumeId,
-      user_id: resume.user_id ?? undefined,
+      // No user_id: 0009 defaults it to app.owner_id().
       doc_json: doc,
       created_by: "import",
     })

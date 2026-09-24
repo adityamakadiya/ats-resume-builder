@@ -1,10 +1,11 @@
 /**
- * The four things every route in this group does before it does its job.
+ * The three things every route in this group does before it does its job.
  *
- * Authenticate, rate limit, read a body, and refuse in a sentence. They live
- * beside the SSE writer rather than in `src/app/api/_shared` because a route
- * folder is a routing concern and this is not; and because two of the four
- * routes have to refuse *inside* an already-open stream, where a `Response`
+ * Rate limit, read a body, and refuse in a sentence. There used to be a
+ * fourth, authenticate, and there is no longer anyone to authenticate. They
+ * live beside the SSE writer rather than in `src/app/api/_shared` because a
+ * route folder is a routing concern and this is not; and because two of the
+ * four routes have to refuse *inside* an already-open stream, where a `Response`
  * is no longer available and the same words have to come back as an event.
  *
  * `refuse()` returns a plain web `Response`, not `NextResponse`. Nothing here
@@ -17,6 +18,7 @@
  */
 
 import { z } from "zod";
+import { OWNER_ID } from "@/lib/supabase/config";
 import { getServerClient, type ServerClient } from "@/lib/supabase/server";
 import { take, type BucketName } from "./rate-limit";
 
@@ -25,15 +27,18 @@ export function refuse(reason: string, remedy: string, status: number, headers?:
 }
 
 export type Gate =
+  /** `userId` is always OWNER_ID. It keys the rate limiter and the cache. */
   | { ok: true; userId: string; supabase: ServerClient }
   | { ok: false; response: Response };
 
 /**
- * Signed in, and not hammering.
+ * Not hammering, and pointed at a database that exists.
  *
- * `auth.getUser()` and not `getSession()`: the session is read from a cookie
- * and believed, the user is verified with the auth server. Anything that
- * gates spend has to use the verified one.
+ * It no longer asks who is calling, because there is no longer an answer:
+ * see the note at the top of lib/supabase/client.ts. The rate limit stays,
+ * and it stays because it guards model spend rather than a tenant boundary.
+ * With one owner there is one bucket, keyed on OWNER_ID, which is the honest
+ * key now that it is not keyed on a session.
  */
 export async function gate(bucket: BucketName): Promise<Gate> {
   const supabase = await getServerClient();
@@ -48,27 +53,12 @@ export async function gate(bucket: BucketName): Promise<Gate> {
     };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return {
-      ok: false,
-      response: refuse(
-        "Your session has expired.",
-        "Sign in again. Nothing you typed has been lost.",
-        401,
-      ),
-    };
-  }
-
-  const limit = take(bucket, user.id);
+  const limit = take(bucket, OWNER_ID);
   if (!limit.ok) {
     return {
       ok: false,
       response: refuse(
-        "That is more requests than this account is allowed in a short window.",
+        "That is more requests than this app is allowed in a short window.",
         `Wait ${limit.retryAfterSeconds} seconds and try again.`,
         429,
         { "Retry-After": String(limit.retryAfterSeconds) },
@@ -76,7 +66,7 @@ export async function gate(bucket: BucketName): Promise<Gate> {
     };
   }
 
-  return { ok: true, userId: user.id, supabase };
+  return { ok: true, userId: OWNER_ID, supabase };
 }
 
 export type BodyResult<T> = { ok: true; value: T } | { ok: false; response: Response };

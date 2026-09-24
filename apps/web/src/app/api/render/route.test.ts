@@ -17,7 +17,6 @@ const supabaseState = vi.hoisted(() => ({ client: null as unknown }));
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: async () => supabaseState.client,
-  getCurrentUser: async () => null,
 }));
 
 const { POST } = await import("./route");
@@ -33,7 +32,7 @@ function post(body: unknown, signal?: AbortSignal) {
 
 beforeEach(() => {
   resetRateLimits();
-  supabaseState.client = unmigratedSupabase({ id: "user-1" });
+  supabaseState.client = unmigratedSupabase();
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -117,8 +116,27 @@ describe("POST /api/render", () => {
     expect(sent.filename).not.toMatch(/["\r\n]/);
   });
 
-  it("401s an expired session", async () => {
-    supabaseState.client = unmigratedSupabase(null);
-    expect((await POST(post({ html: "<html></html>" }))).status).toBe(401);
+  it("renders for a caller with no session, because there is no such thing", async () => {
+    // This used to be a 401 on an expired session. Nothing signs in now, so
+    // every caller looks exactly like the one this used to turn away.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      }),
+    );
+
+    expect((await POST(post({ html: "<html></html>" }))).status).toBe(200);
+  });
+
+  it("still refuses when Supabase is not configured, naming both variables", async () => {
+    supabaseState.client = null;
+
+    const response = await POST(post({ html: "<html></html>" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   });
 });

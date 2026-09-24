@@ -8,10 +8,23 @@
  * client has to handle the unconfigured branch, and the UI renders a panel
  * that says which two variables are missing and where to put them.
  *
- * Both variables are NEXT_PUBLIC_ on purpose. The anon key is designed to ship
- * to browsers; row-level security, not key secrecy, is what keeps one tenant
- * out of another's rows.
+ * Both variables are NEXT_PUBLIC_ on purpose. The publishable key is designed
+ * to ship to browsers. What used to keep one tenant out of another's rows was
+ * row-level security rather than the secrecy of that key; there are no longer
+ * either of those things. The note at the top of `client.ts` says what that
+ * means, once.
  */
+
+/**
+ * The one owner every row belongs to.
+ *
+ * Mirrors `app.owner_id()` in supabase/migrations/0009_single_user.sql, which
+ * is the DEFAULT on `user_id` in every table. Application code should not send
+ * `user_id` at all and let that default apply; this constant is here for the
+ * places where a value is genuinely required, such as the storage path prefix
+ * and the rate-limit and cache keys that used to be the session user's id.
+ */
+export const OWNER_ID = "00000000-0000-0000-0000-00000000da7a";
 
 export type SupabaseConfig =
   | { ok: true; url: string; anonKey: string }

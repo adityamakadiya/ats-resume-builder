@@ -1,12 +1,16 @@
 /**
- * The login form from the keyboard.
+ * /start from the keyboard.
  *
- * Someone who never touches the mouse should be able to sign in, and should
- * be able to see where they are while doing it. Two separate things:
- * reaching the controls in a sensible order, and the focus ring actually
- * being drawn. `globals.css` sets one loud `:focus-visible` outline for the
- * whole app, and a component that sets `outline: none` without replacing it
- * would silently undo that for its own control.
+ * It used to be the login form. There is no login form, so the screen worth
+ * holding to this standard is the first one in the funnel: someone who never
+ * touches the mouse should be able to reach both ways of starting a resume,
+ * and should be able to see where they are while doing it.
+ *
+ * Two separate things: reaching the controls in a sensible order, and the
+ * focus ring actually being drawn. `globals.css` sets one loud
+ * `:focus-visible` outline for the whole app, and a component that sets
+ * `outline: none` without replacing it would silently undo that for its own
+ * control.
  */
 
 import { test, expect } from "../support/fixtures";
@@ -27,22 +31,21 @@ async function focused(page: import("@playwright/test").Page) {
 }
 
 /**
- * Walk one full tab cycle, starting from the top of the document.
- *
- * Blurring and pressing Tab does not start over: Chromium resumes from where
- * the last focus was, and this page autofocuses the email field, so a naive
- * walk records the submit button first and then everything else. So the walk
- * runs until it reaches the skip link, which is the document's first
- * tabbable, and only then starts recording.
+ * Walk from the top of the document until the skip link has focus, so the
+ * recorded order always starts from the same place. Chromium resumes tabbing
+ * from wherever focus last was, not from the top.
  */
-async function tabCycle(page: import("@playwright/test").Page, steps = 8) {
+async function toSkipLink(page: import("@playwright/test").Page) {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press("Tab");
-    if (/skip to content/i.test(await focused(page))) break;
+    if (/skip to content/i.test(await focused(page))) return;
   }
+  throw new Error("never reached the skip link");
+}
 
+async function tabCycle(page: import("@playwright/test").Page, steps = 8) {
+  await toSkipLink(page);
   const order = ["a:Skip to content"];
   for (let i = 0; i < steps; i++) {
     await page.keyboard.press("Tab");
@@ -51,42 +54,34 @@ async function tabCycle(page: import("@playwright/test").Page, steps = 8) {
   return order;
 }
 
-test("tab order runs skip link, Google, email, submit", async ({ page }) => {
-  await page.goto("/login");
+test("tab order runs skip link, then the two ways to start", async ({ page }) => {
+  await page.goto("/start");
 
   const order = await tabCycle(page);
   const walk = order.join("\n");
   const indexOf = (pattern: RegExp) => order.findIndex((entry) => pattern.test(entry));
 
   const skip = indexOf(/skip to content/i);
-  const google = indexOf(/continue with google/i);
-  const email = indexOf(/^email:/i);
-  const submit = indexOf(/email me a sign in link/i);
+  const dropzone = indexOf(/drop your resume here/i);
+  const blank = indexOf(/choose a blank template/i);
 
   expect(skip, `no skip link. Walk was:\n${walk}`).toBe(0);
-  expect(google, `Google button never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
-  expect(email, `email field never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
-  expect(submit, `submit never took focus. Walk was:\n${walk}`).toBeGreaterThanOrEqual(0);
+  expect(dropzone, `the dropzone never took focus. Walk was:\n${walk}`).toBeGreaterThan(0);
+  expect(blank, `the blank template button never took focus. Walk was:\n${walk}`).toBeGreaterThan(0);
 
-  expect(skip, `Walk was:\n${walk}`).toBeLessThan(google);
-  expect(google, `Walk was:\n${walk}`).toBeLessThan(email);
-  expect(email, `Walk was:\n${walk}`).toBeLessThan(submit);
+  expect(
+    dropzone,
+    `the recommended path has to come first. Walk was:\n${walk}`
+  ).toBeLessThan(blank);
 });
 
-test("every control in the form draws a visible focus ring", async ({ page }) => {
-  await page.goto("/login");
-
-  // Same reset as the tab order test: start from the top of the document.
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  for (let i = 0; i < 12; i++) {
-    await page.keyboard.press("Tab");
-    if (/skip to content/i.test(await focused(page))) break;
-  }
+test("every control on the page draws a visible focus ring", async ({ page }) => {
+  await page.goto("/start");
+  await toSkipLink(page);
 
   const targets = [
-    { name: "Google button", pattern: /continue with google/i },
-    { name: "email field", pattern: /^email:/i },
-    { name: "submit", pattern: /email me a sign in link/i },
+    { name: "dropzone", pattern: /drop your resume here/i },
+    { name: "blank template", pattern: /choose a blank template/i },
   ];
 
   const seen = new Set<string>();
@@ -125,13 +120,11 @@ test("every control in the form draws a visible focus ring", async ({ page }) =>
   expect(Array.from(seen).sort()).toEqual(targets.map((t) => t.name).sort());
 });
 
-test("the form submits on Enter from the email field", async ({ page }) => {
-  await page.goto("/login");
+test("the skip link jumps past the chrome to the content", async ({ page }) => {
+  await page.goto("/start");
+  await toSkipLink(page);
+  await page.keyboard.press("Enter");
 
-  await page.getByLabel(/work email/i).fill("nope");
-  await page.getByLabel(/work email/i).press("Enter");
-
-  // The in-page validation is the observable proof the form submitted at all
-  // without anything having to be clicked.
-  await expect(page.getByText(/does not look like an email address/i)).toBeVisible();
+  await expect(page).toHaveURL(/#main$/);
+  expect(await page.locator("#main").count()).toBe(1);
 });

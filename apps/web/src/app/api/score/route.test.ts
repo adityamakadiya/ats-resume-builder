@@ -15,7 +15,6 @@ const supabaseState = vi.hoisted(() => ({ client: null as unknown }));
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: async () => supabaseState.client,
-  getCurrentUser: async () => null,
 }));
 
 const { POST } = await import("./route");
@@ -30,7 +29,7 @@ function post(body: unknown) {
 
 beforeEach(() => {
   resetRateLimits();
-  supabaseState.client = unmigratedSupabase({ id: "user-1" });
+  supabaseState.client = unmigratedSupabase();
 });
 
 afterEach(() => {
@@ -48,8 +47,8 @@ describe("POST /api/score", () => {
     expect(payload.ok).toBe(true);
     expect(typeof payload.report.overall).toBe("number");
     expect(payload.report.matched_keywords).toContain("PostgreSQL");
-    // No model, no document service, no database read. The auth check is
-    // mocked out precisely so that anything left would show up here.
+    // No model, no document service, no database read. Nothing else in the
+    // route may reach the network, so anything left would show up here.
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -59,13 +58,24 @@ describe("POST /api/score", () => {
     expect(second.report).toEqual(first.report);
   });
 
-  it("refuses an unauthenticated caller with 401", async () => {
-    supabaseState.client = unmigratedSupabase(null);
-
+  it("serves a caller with no session, because there is no such thing", async () => {
+    // This used to be a 401. There is no sign in and no session to expire,
+    // so an anonymous caller is the only kind of caller there is.
     const response = await POST(post({ tailored: TAILORED, facts: FACTS, job: JOB }));
 
-    expect(response.status).toBe(401);
-    expect((await response.json()).ok).toBe(false);
+    expect(response.status).toBe(200);
+    expect((await response.json()).ok).toBe(true);
+  });
+
+  it("still refuses when Supabase is not configured, naming both variables", async () => {
+    supabaseState.client = null;
+
+    const response = await POST(post({ tailored: TAILORED, facts: FACTS, job: JOB }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   });
 
   it("answers a malformed body with a readable 400, not a 500", async () => {

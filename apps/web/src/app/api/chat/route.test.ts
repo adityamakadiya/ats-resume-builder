@@ -44,7 +44,6 @@ vi.mock("openai", () => {
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: async () => supabaseState.client,
-  getCurrentUser: async () => null,
 }));
 
 const { POST } = await import("./route");
@@ -125,7 +124,7 @@ beforeEach(() => {
   chatCreate.mockReset();
   resetRateLimits();
   process.env.OPENAI_API_KEY = "test-key";
-  supabaseState.client = unmigratedSupabase({ id: "user-1" });
+  supabaseState.client = unmigratedSupabase();
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -326,10 +325,26 @@ describe("POST /api/chat", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("401s an expired session before calling the model", async () => {
-    supabaseState.client = unmigratedSupabase(null);
+  it("calls the model for a caller with no session, because there is no such thing", async () => {
+    // This used to 401 before spending anything. There is no sign in now, so
+    // the only thing standing in front of the model is the rate limit.
+    stubTurn("Nothing to change.", []);
+
     const response = await POST(post({}));
-    expect(response.status).toBe(401);
+
+    expect(response.status).toBe(200);
+    expect(chatCreate).toHaveBeenCalled();
+  });
+
+  it("still refuses before the model when Supabase is not configured", async () => {
+    supabaseState.client = null;
+
+    const response = await POST(post({}));
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     expect(chatCreate).not.toHaveBeenCalled();
   });
 });

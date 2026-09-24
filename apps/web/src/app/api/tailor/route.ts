@@ -106,9 +106,12 @@ export async function POST(request: Request) {
         return;
       }
 
-      // `{kind:"user"}`, always. A cache entry derived from a resume is that
-      // person's data, and a global key on resume-derived input is one tenant
-      // reading another's. See the privacy note in lib/pipeline/cache.ts.
+      // `{kind:"user"}`, always. A cache entry derived from a resume is the
+      // owner's data, and a global key on resume-derived input would make it
+      // shareable. There is one user now and the key is OWNER_ID, but the
+      // scope stays owned rather than global so restoring tenancy is a change
+      // to what `userId` holds and not a change to the cache's shape. See the
+      // privacy note in lib/pipeline/cache.ts.
       const scope = { kind: "user", userId } as const;
 
       const facts = await extractResumeFacts(raw, scope, write.signal);
@@ -208,7 +211,6 @@ export async function POST(request: Request) {
 
       const saved = await persistRun({
         supabase,
-        userId,
         resumeId,
         templateId,
         jdText: postingText,

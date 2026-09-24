@@ -134,8 +134,9 @@ const NOT_WIRED: ServerErrorEvent = {
  *
  * The routes answer a bad request with `{ok:false, reason, remedy}` and a 4xx
  * rather than opening a stream to say so, and those two sentences are written
- * for the user. Reading them back is the difference between "Your session has
- * expired. Sign in again." and "The server answered 401".
+ * for the user. Reading them back is the difference between "That is more
+ * requests than this app is allowed in a short window. Wait 30 seconds and
+ * try again." and "The server answered 429".
  */
 async function refusalOf(response: Response): Promise<ServerErrorEvent> {
   try {

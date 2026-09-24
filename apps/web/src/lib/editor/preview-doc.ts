@@ -12,7 +12,7 @@
  *
  *   - no document id in the URL
  *   - no Supabase configured
- *   - the row belongs to somebody else, so RLS makes it not exist
+ *   - there is no row with that id
  *   - `documents.facts_json` is missing because migration 0008 has not been
  *     applied on this database, which makes the select itself error
  *   - the column is there and null, because parsing failed

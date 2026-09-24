@@ -1,8 +1,11 @@
 /**
  * Shared bits for tier 2.
  *
- * The skip guard lives here so every spec gives the same instruction, and so
- * there is exactly one place to change when the credentials story changes.
+ * There is no skip guard any more. Tier 2 needed a real Supabase account
+ * because the app needed a session; authentication has been removed, so the
+ * suite runs for anyone with the dev server up and the `setup` project that
+ * signed it in is gone. It stays a separate tier because it is slow, it
+ * spends model tokens and it writes rows.
  *
  * The PDF is built rather than committed. A resume fixture checked into a
  * repository is somebody's phone number checked into a repository, which is
@@ -24,19 +27,7 @@ export const CANDIDATE = {
 /** The name of the invented candidate in the repo's own fixtures. */
 export const FIXTURE_NAME = "Rohan Iyer";
 
-export const HAVE_CREDENTIALS = Boolean(process.env.E2E_EMAIL && process.env.E2E_PASSWORD);
-
-export const SKIP_REASON =
-  "Tier 2 needs a real Supabase session. Set E2E_EMAIL and E2E_PASSWORD to an " +
-  "account that exists and has a password, then rerun. It is opt in because " +
-  "email signup on this project is rate limited and a shared account cannot " +
-  "be committed. See e2e/README.md.";
-
 export const test = base.extend({});
-
-test.beforeEach(() => {
-  test.skip(!HAVE_CREDENTIALS, SKIP_REASON);
-});
 
 export { expect };
 

@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_TEMPLATE_ID, TEMPLATES } from "@ats/templates";
 import { getServerClient } from "@/lib/supabase/server";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -26,17 +27,6 @@ export async function POST(request: Request) {
       "This deployment has no database configured.",
       "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then restart the server.",
       503
-    );
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return refuse(
-      "Your session has expired.",
-      "Sign in again. Your template choice will be remembered in the address bar.",
-      401
     );
   }
 
@@ -79,9 +69,9 @@ export async function POST(request: Request) {
 
     Not validated against the documents table here. The composite foreign key
     added in 0007 is `(source_document_id, user_id) references documents (id,
-    user_id)`, so Postgres refuses a document belonging to anyone else, and a
-    check in application code would be a second opinion that can drift from
-    the one that is actually enforced.
+    user_id)`, so Postgres refuses an id that does not resolve, and a check in
+    application code would be a second opinion that can drift from the one
+    that is actually enforced.
   */
   const sourceDocumentId =
     typeof body.documentId === "string" && UUID.test(body.documentId)
@@ -91,7 +81,8 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("resumes")
     .insert({
-      user_id: user.id,
+      // No user_id. Migration 0009 defaults it to app.owner_id(), and a value
+      // sent from here would be a second place for the owner to be decided.
       template_id: templateId,
       title,
       status: "draft",
@@ -101,21 +92,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    // 23503 is a foreign key violation, which here means the document id does
-    // not resolve for this user: deleted, or never theirs. Retrying will not
-    // help, so say what to do instead of inviting another attempt.
-    if (error.code === "23503") {
-      return refuse(
-        "That upload could not be found.",
-        "It may have been deleted. Upload the resume again, or start from scratch.",
-        422
-      );
-    }
-    return refuse(
-      "The resume could not be created.",
-      `${error.message}. Nothing was saved, so it is safe to try again.`,
-      502
-    );
+    const described = describeDbError(error, "Creating the resume");
+    return refuse(described.reason, described.remedy, described.status);
   }
 
   return NextResponse.json({ ok: true, id: data.id });

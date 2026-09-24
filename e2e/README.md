@@ -2,17 +2,23 @@
 
 Playwright. Three tiers, split by what they need in order to run.
 
-The split exists because of one awkward fact: a real session on this app
-needs a Supabase account, and email signup on this project is rate limited.
-A suite that only works for whoever has the credentials is a suite nobody
-runs. So almost everything here is written to work without an account, and
-the part that genuinely cannot is opt in and says so when it skips.
+The split used to exist because of one awkward fact: a real session needed a
+Supabase account and email signup on this project is rate limited, so tier 2
+was opt in and skipped itself for anyone without credentials. **There is no
+authentication in this app any more.** There is no sign in, no session and
+no account, so every tier runs for everyone. Tier 2 stays separate because
+it is slow, it spends model tokens and it writes rows, not because it needs
+a secret.
+
+What that costs is written down once, at the top of
+`apps/web/src/lib/supabase/client.ts`. Read it before pointing any of this
+at a database you care about.
 
 ```
 e2e/
-  tier1/               no account, normal dev server           23 tests
-  tier1-unconfigured/  no account, Supabase vars blanked        4 tests
-  tier2/               needs E2E_EMAIL / E2E_PASSWORD           8 tests
+  tier1/               normal dev server                       29 tests
+  tier1-unconfigured/  Supabase vars blanked                    4 tests
+  tier2/               the full funnel, real DB and model       7 tests
   tier3/               no server at all, file:// fixtures      37 tests
   support/             the console watchdog and the axe pass
   harness/             boots the second, unconfigured server
@@ -34,12 +40,12 @@ npm run e2e:install     # once: fetch the Chromium build
 | Everything that belongs in CI | `npm run e2e:ci` |
 | Both no-account tiers | `npm run e2e:tier1` |
 | The rendered document checks | `npm run e2e:tier3` |
-| The signed in suite | `npm run e2e:tier2` |
-| All five projects | `npm run e2e` |
+| The full funnel | `npm run e2e:tier2` |
+| All four projects | `npm run e2e` |
 | Last report | `npm run e2e:report` |
 
 `npm run e2e:ci` is `--project=tier1 --project=tier1-unconfigured
---project=tier3`, 64 tests, about thirty seconds cold. That is the command
+--project=tier3`, 70 tests, about thirty seconds cold. That is the command
 for a CI job. Tier 2 is left out on purpose; see below.
 
 A dev server is started automatically, and reused if one is already up
@@ -50,23 +56,33 @@ the unconfigured one. Override with `E2E_PORT`, `E2E_BASE_URL` and
 Only the projects you select get a server. `--project=tier3` opens nine local
 files and boots nothing.
 
-## Tier 1, no account
+## Tier 1
 
 Runs anywhere, and is the tier that must stay green.
 
-- `/login` renders: the Google button, the email field, the strapline. And
-  the word "verified" appears nowhere on the page. The product's claim is
-  that a rewrite is *traced* to a line the candidate wrote; it does not
-  verify that anything is true. "Verified" is one word away and would be a
-  lie, so there is a test holding it off the page.
-- Every protected prefix, signed out, is a 307 to `/login?next=<path>`, with
-  the query string preserved. Asserted at the HTTP level with redirects off,
-  because a browser follows the redirect and the evidence disappears.
-- `/login` at 375px: no horizontal scroll, nothing individually overflowing,
-  the primary button in the viewport, at least 40px tall and hittable.
-- Keyboard: one full tab cycle is skip link, Google, email, submit, and each
-  of the three controls draws a visible focus ring.
-- axe on `/login`, clean and in its error state. The threshold is serious and
+`/login` is gone, so the four specs that lived on it moved to `/start` and
+`/resumes`, which are the two screens a visit now begins on.
+
+- `/start` renders: the step counter, the dropzone, the blank template
+  button. And the word "verified" appears nowhere on it, or on `/resumes`.
+  The product's claim is that a rewrite is *traced* to a line the candidate
+  wrote; it does not verify that anything is true. "Verified" is one word
+  away and would be a lie, so there is a test holding it off the page.
+- Every prefix that used to be gated answers 200 with no `Location` header,
+  `/` is a 307 to `/resumes` and nowhere else, and `/login` is a 404 rather
+  than a redirect. Asserted at the HTTP level with redirects off, because a
+  browser follows a redirect and the evidence disappears. This is the exact
+  inverse of what `auth-gate.spec.ts` asserted before, and it is the same
+  file: the property was not deleted, it was turned over.
+- `/resumes` offers nothing to sign out of. A dead "Sign out" control is
+  worse than no control, because it looks like there is a session behind it.
+- `/start` and `/resumes` at 375px: no horizontal scroll, nothing
+  individually overflowing, both primary actions in the viewport, at least
+  40px tall and hittable, and the mobile navigation drawer opens.
+- Keyboard: one full tab cycle is skip link, dropzone, blank template, each
+  control draws a visible focus ring, and the skip link reaches `#main`.
+- axe on `/start` and `/resumes`, clean and in the dropzone's error state.
+  The threshold is serious and
   critical, and `support/a11y.ts` will not be lowered to make a run green:
   the first run of this suite found seven serious contrast violations on the
   setup panel, they were recorded as an expected failure with the numbers
@@ -80,9 +96,9 @@ Runs anywhere, and is the tier that must stay green.
 ## Tier 1, unconfigured
 
 The same app with the two `NEXT_PUBLIC_SUPABASE_*` variables blank. That is
-not a broken state, it is the state of a fresh clone: nothing throws, nothing
-redirects, and every screen renders a panel naming the two variables and
-saying which file they go in. It is the first thing a new contributor sees.
+not a broken state, it is the state of a fresh clone: nothing throws, and
+every screen renders a panel naming the two variables and saying which file
+they go in. It is the first thing a new contributor sees.
 
 Getting a server into that state took some doing, and the shape is worth
 knowing before you touch it:
@@ -99,45 +115,45 @@ knowing before you touch it:
   to everything else on every boot. `src` has to be a real copy: Next's route
   discovery follows a symlink to its real path and then finds no routes, and
   the failure looks like the layout rendering with every page 404ing.
+- The harness resolves the `next` binary rather than assuming it is under
+  `apps/web/node_modules`. npm hoists to the workspace root, that directory
+  can hold nothing but a vite cache, and the run then died with
+  MODULE_NOT_FOUND before collecting a single spec. The `node_modules`
+  symlink still points there on purpose: resolution walks up and finds the
+  hoisted copy anyway, and pointing the link at the root instead makes
+  Tailwind scan every dependency and emit utilities generated from the bytes
+  of a binary, which fails the CSS parse.
 
 Nothing there needs maintaining by hand. `src` is recopied each boot, so it
 cannot go stale.
 
-The axe pass on `/start` lives here rather than in tier 1, because a signed
-out visitor to a configured server is redirected away from `/start` and
-never sees it. Same scan, same threshold.
+`/start` is scanned by axe here and in tier 1, and the two are not
+redundant: here it renders the setup panel, there it renders the real upload
+card. Same scan, same threshold.
 
 If that server ever fails to start with "Parsing CSS source code failed",
 delete `unconfigured-app/.next`. Tailwind can cache a garbled stylesheet if
 it happens to read `apps/web/src` while something else is writing to it, and
 the scratch project keeps its own Turbopack cache.
 
-## Tier 2, signed in, opt in
+## Tier 2, the full funnel
 
 ```sh
-E2E_EMAIL=you@example.com E2E_PASSWORD=... npm run e2e:tier2
+npm run e2e:tier2
 ```
 
-Without those two variables all eight tests skip, and the terminal says what
-to set. They do not fail, and they do not silently pass.
+No credentials. There used to be two environment variables, a `setup`
+project and an `auth.setup.ts` that exchanged them with GoTrue for a session
+cookie; authentication has been removed from the app, so all three are gone
+and the suite runs for anyone with the dev server up. `.auth/` is gone with
+them.
 
-**Why it is opt in rather than part of CI.** The account has to be real.
-Email signup on this Supabase project is rate limited, so a test cannot make
-one on the fly, and a shared account cannot be committed. There is also no
-password on the login screen at all: the product signs people in with a magic
-link or with Google, and neither can be driven from a test without an inbox
-or a Google session.
-
-So `auth.setup.ts` exchanges the credentials with GoTrue directly and writes
-the cookie `@supabase/ssr` would have written, once, into `.auth/user.json`.
-Every tier 2 test starts from that storage state. The cookie encoding is
-copied from `@supabase/ssr` and the source files are named in the comments;
-if a Supabase upgrade changes it, that file is what breaks.
-
-**Making an account that works.** In the Supabase dashboard, Authentication,
-Users, add a user with a password (or set one on an existing user). That is
-all tier 2 needs. Use a throwaway account: the suite uploads a resume and
-creates rows under it.
+**Why it is still out of CI.** It uploads a real PDF, runs the real document
+service and the real model, and writes rows to whatever database
+`apps/web/.env.local` points at. That is slow and it costs money, and it is
+destructive in the sense that it leaves data behind. It also needs migration
+`0009_single_user.sql` applied, or every insert is refused for want of a
+`user_id`.
 
 What it covers: upload a PDF and land on `/start/template?document=<uuid>`,
 pick a template and land on a working editor at `/resume/<uuid>`, the score
@@ -191,7 +207,12 @@ report, and `npx playwright show-trace <path>` opens a single trace.
 ## Notes
 
 - `tsconfig.json` here maps `@playwright/test` and `@axe-core/playwright` to
-  `apps/web/node_modules`. There is no `node_modules` at the repository root,
-  so a bare import from this directory resolves against nothing. Playwright
-  honours tsconfig `paths` when it transforms a spec.
-- `.auth/` holds a live session token and is gitignored.
+  `apps/web/node_modules`, so a bare import from this directory resolves
+  somewhere. Playwright honours tsconfig `paths` when it transforms a spec.
+  Be aware that npm hoists: those packages may actually sit at the
+  repository root with `apps/web/node_modules` holding nothing but a vite
+  cache. Playwright still resolves them, but anything that builds a path
+  into `apps/web/node_modules` by hand will not, which is the harness note
+  above.
+- There is no `.auth/` any more. It held a live session token for the
+  `setup` project, and neither exists.

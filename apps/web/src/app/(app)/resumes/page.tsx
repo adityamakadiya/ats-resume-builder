@@ -53,8 +53,6 @@ export default async function ResumesPage() {
       <div className="mt-7">
         {result.state === "unconfigured" ? (
           <SetupNotice context="Your resume library" />
-        ) : result.state === "signed-out" ? (
-          <SignedOut />
         ) : result.state === "failed" ? (
           <LoadFailed reason={result.reason} remedy={result.remedy} />
         ) : result.resumes.length === 0 ? (
@@ -68,26 +66,6 @@ export default async function ResumesPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function SignedOut() {
-  return (
-    <section className="rounded-xl border border-rule bg-paper-raised px-6 py-12 text-center shadow-xs">
-      <p className="inline-flex items-center rounded-full bg-paper-sunk px-2.5 py-1 text-[0.75rem] font-medium text-ink-muted">
-        Session ended
-      </p>
-      <h2 className="mt-3.5 text-xl font-semibold tracking-[-0.015em] text-ink sm:text-2xl">
-        You have been signed out
-      </h2>
-      <p className="mx-auto mt-2.5 max-w-[44ch] text-[0.9375rem] leading-relaxed text-ink-muted">
-        Nothing was lost. Your resumes are on the server and will be here when
-        you come back.
-      </p>
-      <LinkButton size="lg" className="mt-6" href="/login?next=/resumes">
-        Sign in again
-      </LinkButton>
-    </section>
   );
 }
 

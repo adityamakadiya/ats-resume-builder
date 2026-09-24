@@ -11,7 +11,7 @@
  * in a way nobody notices until a recruiter opens it. Printing the very bytes
  * the user was looking at is the only version of this that cannot drift.
  *
- * This route is a proxy and deliberately nothing more. It authenticates, caps
+ * This route is a proxy and deliberately nothing more. It rate limits, caps
  * the body, forwards, and streams the PDF back without buffering it, so a
  * three-page render does not sit in this process's heap on its way through.
  *

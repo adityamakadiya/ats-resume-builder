@@ -121,14 +121,17 @@ describe("factsToDocument", () => {
 
 describe("factRows", () => {
   it("marks everything as coming from the document", () => {
-    const rows = factRows(facts(), "user-1", "doc-1");
+    const rows = factRows(facts(), "doc-1");
     expect(rows.every((r) => r.origin === "document")).toBe(true);
-    expect(rows.every((r) => r.user_id === "user-1")).toBe(true);
     expect(rows.every((r) => r.document_id === "doc-1")).toBe(true);
+    // No owner is sent: 0009_single_user.sql defaults user_id to
+    // app.owner_id(), so a row carrying one would be the application
+    // deciding something the database already decided.
+    expect(rows.every((r) => !("user_id" in r))).toBe(true);
   });
 
   it("produces one citable row per fact id", () => {
-    const keys = factRows(facts(), "u", "d").map((r) => r.fact_key);
+    const keys = factRows(facts(), "d").map((r) => r.fact_key);
 
     expect(keys).toContain("SUMMARY");
     expect(keys).toContain("HEADLINE");
@@ -141,13 +144,13 @@ describe("factRows", () => {
   });
 
   it("drops empty text rather than writing a fact that says nothing", () => {
-    const rows = factRows(facts({ summary: "", headline: "" }), "u", "d");
+    const rows = factRows(facts({ summary: "", headline: "" }), "d");
     expect(rows.map((r) => r.fact_key)).not.toContain("SUMMARY");
     expect(rows.map((r) => r.fact_key)).not.toContain("HEADLINE");
   });
 
   it("attaches a role's technologies to its bullets, so the guard can see them", () => {
-    const bullet = factRows(facts(), "u", "d").find((r) => r.fact_key === "E1.B1");
+    const bullet = factRows(facts(), "d").find((r) => r.fact_key === "E1.B1");
     expect(bullet?.entities_json.technologies).toEqual(["Kafka", "PostgreSQL"]);
   });
 });

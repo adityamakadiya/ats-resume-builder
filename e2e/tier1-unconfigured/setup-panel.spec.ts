@@ -2,11 +2,16 @@
  * The fresh clone.
  *
  * With no NEXT_PUBLIC_SUPABASE_* variables set, this app deliberately does
- * not redirect, does not throw and does not show a stack trace. Every screen
- * renders a panel that names the two missing variables and says where to put
- * them. `apps/web/src/lib/supabase/config.ts` and the early return in
- * `lib/supabase/proxy.ts` are what make that true, and it is the very first
- * thing a new contributor sees, so it is worth holding in place.
+ * not throw and does not show a stack trace. Every screen renders a panel
+ * that names the two missing variables and says where to put them.
+ * `apps/web/src/lib/supabase/config.ts` is what makes that true, and it is
+ * the very first thing a new contributor sees, so it is worth holding in
+ * place.
+ *
+ * There is no longer a gate to let the request through: authentication was
+ * removed, so nothing was ever going to redirect. The 200 below is still
+ * worth asserting, because "renders" and "renders something useful" are
+ * different claims and only the second one is the point.
  *
  * The server behind this project is booted by e2e/harness/serve-unconfigured.mjs.
  */
@@ -16,11 +21,11 @@ import { expectNoSeriousA11yViolations } from "../support/a11y";
 
 const MISSING = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
 
-test("/start renders instead of redirecting", async ({ request }) => {
+test("/start renders instead of erroring", async ({ request }) => {
   const response = await request.get("/start", { maxRedirects: 0 });
   expect(
     response.status(),
-    "unconfigured, the gate has to let the request through: a login page that cannot work is worse than an instruction"
+    "unconfigured is a state to explain, not a state to fail on: an instruction beats a stack trace"
   ).toBe(200);
 });
 
@@ -44,12 +49,13 @@ test("/start names both missing variables", async ({ page }) => {
   await expect(page.getByText("apps/web").first()).toBeVisible();
 });
 
-test("/login shows the same panel rather than a broken form", async ({ page }) => {
-  await page.goto("/login");
+test("/resumes shows the same panel rather than an empty library", async ({ page }) => {
+  await page.goto("/resumes");
 
   await expect(page.getByRole("heading", { name: "Supabase is not configured" })).toBeVisible();
-  // No sign in controls, because none of them could work.
-  await expect(page.getByRole("button", { name: /continue with google/i })).toHaveCount(0);
+  // Not the teaching empty state: nothing has been read, so "no resumes yet"
+  // would be a claim the app is in no position to make.
+  await expect(page.getByText(/no resumes yet/i)).toHaveCount(0);
 });
 
 /*
