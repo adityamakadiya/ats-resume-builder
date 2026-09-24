@@ -341,15 +341,23 @@ def test_stuffed_scores_below_honest(job, facts, capsys):
 
 
 def test_keyword_coverage_saturates(job, facts):
+    """Repetition inside one zone buys nothing.
+
+    Placement is held constant on purpose. An earlier version of this test
+    moved the term from the summary into a bullet at the same time as
+    repeating it, so when zone weighting arrived the test failed for the
+    right reason and read like the wrong one. Repetition and placement are
+    two different claims and each needs its own test.
+    """
     once = make_doc(
         summary="Backend engineer working on PostgreSQL.",
         skills=["Node.js"],
         bullets=["Tuned a slow report query, cutting it from 90 seconds to three."],
     )
     five_times = make_doc(
-        summary="PostgreSQL engineer. PostgreSQL, PostgreSQL.",
-        skills=["Node.js", "PostgreSQL"],
-        bullets=["Tuned a slow PostgreSQL report query, cutting it from 90 seconds to three."],
+        summary="PostgreSQL engineer. PostgreSQL, PostgreSQL. PostgreSQL and PostgreSQL.",
+        skills=["Node.js"],
+        bullets=["Tuned a slow report query, cutting it from 90 seconds to three."],
     )
 
     a = v2.compute_breakdown(job, facts, once)
@@ -360,6 +368,129 @@ def test_keyword_coverage_saturates(job, facts):
     assert a.keyword_coverage == b.keyword_coverage, "further mentions bought coverage"
     # And the repetition is actively worse overall, via the stuffing penalty.
     assert b.overall < a.overall
+
+
+def test_the_same_term_is_worth_more_in_a_bullet_than_in_a_skills_list(job, facts):
+    """The claim the flat scorer could not tell apart.
+
+    Both documents "have" PostgreSQL. One of them did something with it.
+    Under flat coverage these scored identically, which made the cheapest
+    edit on the page - append the missing word to the skills list - the most
+    profitable one.
+    """
+    listed = make_doc(
+        summary="Backend engineer.",
+        skills=["Node.js", "PostgreSQL"],
+        bullets=["Kept the reporting service running."],
+    )
+    evidenced = make_doc(
+        summary="Backend engineer.",
+        skills=["Node.js"],
+        bullets=[
+            "Reindexed the PostgreSQL ledger, cutting p99 read latency from 840ms to 96ms."
+        ],
+    )
+
+    a = v2.compute_breakdown(job, facts, listed)
+    b = v2.compute_breakdown(job, facts, evidenced)
+
+    # Counted once in both. The difference is entirely where it sits.
+    assert a.keyword_counts["PostgreSQL"] == 1
+    assert b.keyword_counts["PostgreSQL"] == 1
+    assert a.keyword_placements["PostgreSQL"] == "skills"
+    assert b.keyword_placements["PostgreSQL"] == "experience[0]"
+    assert b.keyword_coverage > a.keyword_coverage
+
+
+def _two_roles(current_bullet: str, old_bullet: str) -> TailoredResume:
+    """One document, two roles, reverse-chronological as resumes are written."""
+    return TailoredResume(
+        headline="Backend Engineer",
+        summary=TailoredSummary(text="Backend engineer.", source_ids=["SUMMARY"]),
+        skills=[TailoredSkillGroup(category="Backend", items=["Node.js"], source_ids=["S1"])],
+        experience=[
+            TailoredExperience(
+                source_id="E1",
+                company="Acme Payments",
+                title="Backend Engineer",
+                location="Bengaluru",
+                start_date="Jun 2023",
+                end_date="Present",
+                bullets=[TailoredBullet(text=current_bullet, source_ids=["E1.B1"])],
+            ),
+            TailoredExperience(
+                source_id="E2",
+                company="Older Co",
+                title="Backend Engineer",
+                location="Pune",
+                start_date="Jul 2019",
+                end_date="May 2023",
+                bullets=[TailoredBullet(text=old_bullet, source_ids=["E2.B1"])],
+            ),
+        ],
+    )
+
+
+def test_a_term_in_the_current_role_beats_the_same_term_in_an_old_one(job, facts):
+    """Recency, which flat coverage could not see at all.
+
+    Same document, same single mention of Kafka, same everything else. The
+    only difference is which job it happened in, and a recruiter does not
+    read those as the same claim.
+    """
+    generic = "Kept the reporting service running."
+    kafka = "Moved settlement onto Kafka, cutting the close-of-day window to minutes."
+
+    now = _two_roles(current_bullet=kafka, old_bullet=generic)
+    then = _two_roles(current_bullet=generic, old_bullet=kafka)
+
+    a = v2.compute_breakdown(job, facts, now)
+    b = v2.compute_breakdown(job, facts, then)
+
+    assert a.keyword_counts["Kafka"] == b.keyword_counts["Kafka"] == 1
+    assert a.keyword_placements["Kafka"] == "experience[0]"
+    assert b.keyword_placements["Kafka"] == "experience[1]"
+    assert a.keyword_coverage > b.keyword_coverage
+
+
+def test_recency_is_read_from_dates_not_document_order(job, facts):
+    """A resume listed oldest-first is still read correctly.
+
+    Document order is the tie-breaker, not the signal. Ordering by position
+    alone would punish a candidate for a formatting choice.
+    """
+    doc = _two_roles(current_bullet="Kept things running.", old_bullet="Kept things running.")
+    # Flip the list so the current role is written last.
+    doc.experience = [doc.experience[1], doc.experience[0]]
+
+    order = v2._experience_in_recency_order(doc)
+    assert order[0].company == "Acme Payments", "the Present role should sort first"
+
+
+def test_seniority_distance_costs_the_title_score(facts):
+    """Same role words, different rung."""
+    posting = build_job()
+    posting.title = "Senior Backend Engineer"
+
+    matched = make_doc("Backend engineer.", ["Node.js"], ["Did the work."])
+    matched.experience[0].title = "Senior Backend Engineer"
+
+    under = make_doc("Backend engineer.", ["Node.js"], ["Did the work."])
+    under.experience[0].title = "Junior Backend Engineer"
+
+    assert v2.score_title_match(posting, matched) == 100.0
+    # Two bands below what the posting asks for.
+    assert v2.score_title_match(posting, under) < 65.0
+
+
+def test_a_different_kind_of_job_scores_low_on_title(facts):
+    posting = build_job()
+    posting.title = "Backend Engineer"
+
+    designer = make_doc("Designer.", ["Figma"], ["Did the work."], headline="Product Designer")
+    designer.experience[0].title = "Product Designer"
+
+    assert v2.score_title_match(posting, designer) < 40.0
 
 
 # --------------------------------------------------------------------------- #
@@ -517,6 +648,7 @@ def test_section_warnings_are_a_checklist_not_a_score(tailored):
     assert set(v2.WEIGHTS) == {
         "keyword_coverage",
         "requirement_coverage",
+        "title_match",
         "evidence_density",
         "specificity",
         "experience_match",

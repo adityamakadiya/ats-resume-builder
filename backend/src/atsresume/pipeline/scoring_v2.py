@@ -111,11 +111,18 @@ except ImportError:  # pragma: no cover - defensive; guard has no optional deps
 
 
 WEIGHTS = {
-    "keyword_coverage": 0.35,
-    "requirement_coverage": 0.20,
+    "keyword_coverage": 0.30,
+    "requirement_coverage": 0.18,
+    # New. A recruiter reads the most recent title against the req title before
+    # reading anything else, and rejects on it more often than on any other
+    # single field. Nothing in v2 measured it: experience_match is a years
+    # band, which is not the same question and is near-constant besides.
+    "title_match": 0.12,
     "evidence_density": 0.20,
     "specificity": 0.15,
-    "experience_match": 0.10,
+    # Down from 0.10. Years-in-band is the weakest of the relevance signals and
+    # it was carrying weight that title match earns.
+    "experience_match": 0.05,
 }
 
 PENALTIES = {
@@ -137,6 +144,88 @@ PENALTIES = {
 
 # Below this share of job relevance, prose quality stops earning full credit.
 QUALITY_GATE_FLOOR = 0.35
+
+# --------------------------------------------------------------------------- #
+# Where a term appears, and what that is worth                                 #
+# --------------------------------------------------------------------------- #
+#
+# Coverage used to run over one flat string, so "Kubernetes" in the skills list
+# counted exactly as much as "Kubernetes" in the job the candidate is doing
+# right now. No recruiter reads those as the same claim, and the flat version
+# rewards the cheapest possible edit: append the missing terms to the skills
+# list and the score goes up without the resume being any more true.
+#
+# So every term is now worth the most valuable place it appears. Two axes:
+#
+#   evidenced vs claimed   a term inside a bullet is attached to something the
+#                          candidate says they did; a term in a skills list or
+#                          a summary is an assertion with nothing under it
+#   recency                the same evidence ages
+#
+# A term in the current role still earns 1.0, so a resume whose present job is
+# genuinely the job being applied for can still reach 100. Nothing here is a
+# penalty; it is the absence of a bonus the flat version was giving away.
+
+ZONE_CURRENT_ROLE = 1.00
+# Older roles decay towards a floor rather than to nothing: five-year-old
+# production experience with a tool is worth much less than current experience
+# and much more than never having touched it.
+ZONE_ROLE_DECAY = (1.00, 0.85, 0.72, 0.62)
+ZONE_ROLE_FLOOR = 0.60
+# Side projects are evidence, and usually recent, but unvalidated by an
+# employer. Between an old role and a claim.
+ZONE_PROJECT = 0.80
+ZONE_EDUCATION = 0.60
+# Claims. The summary is at least prose a human reads; a skills list is the
+# cheapest line on the page to add a word to.
+ZONE_SUMMARY = 0.55
+ZONE_SKILLS = 0.50
+ZONE_OTHER = 0.55
+
+# --------------------------------------------------------------------------- #
+# Titles and seniority                                                         #
+# --------------------------------------------------------------------------- #
+
+_PRESENT = re.compile(
+    r"\b(present|current|currently|now|ongoing|to date|till date|date)\b",
+    re.IGNORECASE,
+)
+_YEAR = re.compile(r"\b(19|20)\d{2}\b")
+
+# The ladder, as postings use it. Absent marker means mid, which is what an
+# unqualified "Software Engineer" means on both sides of the table.
+SENIORITY_BANDS: dict[str, int] = {
+    "intern": 0, "internship": 0, "trainee": 0, "graduate": 0, "fresher": 0,
+    "junior": 1, "jr": 1, "entry": 1, "associate": 1,
+    "mid": 2, "intermediate": 2,
+    "senior": 3, "sr": 3,
+    "staff": 4, "lead": 4, "principal": 5, "architect": 4, "manager": 4,
+    "head": 5, "director": 6, "vp": 7, "chief": 8, "cto": 8, "ceo": 8,
+}
+DEFAULT_BAND = 2
+
+# Penalty per level of distance, applied to the title score.
+UNDERQUALIFIED_PER_LEVEL = 20.0
+UNDERQUALIFIED_CAP = 55.0
+# Asymmetric on purpose. Both directions get rejected, but a senior applying
+# down is screened out for fit and salary, not for being unable to do it, and
+# recovers if they want the role. A junior applying up does not recover.
+OVERQUALIFIED_PER_LEVEL = 10.0
+OVERQUALIFIED_CAP = 30.0
+
+# Words that carry no role information. Dropping them stops "Engineer II at a
+# Company" matching "Engineer" on the strength of the filler.
+TITLE_STOPWORDS = frozenset(
+    {
+        "a", "an", "the", "and", "or", "of", "for", "to", "in", "at", "with",
+        "i", "ii", "iii", "iv", "v", "1", "2", "3", "4", "5",
+        "engineer2", "level", "grade", "band",
+    }
+)
+
+# The posting states no title often enough that returning 0 would be a lie and
+# returning 100 would be a gift. Neutral, and it says so in the recommendation.
+TITLE_UNKNOWN = 70.0
 
 
 # --------------------------------------------------------------------------- #
@@ -265,15 +354,132 @@ class KeywordOutcomeV2:
     missing: list[str]
     counts: dict[str, int]
     score: float
+    # term -> the zone it earned its weight in. Empty under flat scoring.
+    # This is what lets the UI say "PostgreSQL is only in your skills list",
+    # which is a more useful sentence than a number moving.
+    placements: dict[str, str] = field(default_factory=dict)
 
 
-def score_keyword_coverage(job: JobSpec, resume: str) -> KeywordOutcomeV2:
+@dataclass
+class Zone:
+    """A region of the resume, and what a term found there is worth.
+
+    ``text`` is normalised at construction. ``_count`` normalises the needle
+    and assumes the haystack already is, which is how ``resume_text_of``
+    hands its output over; a zone built from raw strings matches nothing at
+    all and every term silently falls through to "unplaced".
+    """
+
+    name: str
+    text: str
+    weight: float
+
+
+def _is_present(end_date: str) -> bool:
+    return bool(_PRESENT.search(end_date or ""))
+
+
+def _latest_year(text: str) -> int:
+    found = [int(m.group(0)) for m in _YEAR.finditer(text or "")]
+    return max(found) if found else 0
+
+
+def _experience_in_recency_order(tailored: TailoredResume) -> list:
+    """Most recent role first.
+
+    Resumes are conventionally reverse-chronological and the parser preserves
+    document order, so the original index is the tie-breaker rather than the
+    signal: a resume that is ordered correctly is unaffected, and one that is
+    not gets read correctly anyway.
+    """
+    entries = list(tailored.experience)
+
+    def key(pair):
+        index, entry = pair
+        current = 1 if _is_present(getattr(entry, "end_date", "")) else 0
+        year = _latest_year(getattr(entry, "end_date", "") or "")
+        return (-current, -year, index)
+
+    return [entry for _, entry in sorted(enumerate(entries), key=key)]
+
+
+def _role_weight(rank: int) -> float:
+    if rank < len(ZONE_ROLE_DECAY):
+        return ZONE_ROLE_DECAY[rank]
+    return ZONE_ROLE_FLOOR
+
+
+def _zone(name: str, text: str, weight: float) -> Zone | None:
+    body = normalise(text)
+    return Zone(name, body, weight) if body.strip() else None
+
+
+def keyword_zones(tailored: TailoredResume) -> list[Zone]:
+    """The document, cut into regions worth different amounts.
+
+    Bullets are separated from the headings around them deliberately. A job
+    title containing "Platform" should not make every term in that role look
+    evidenced, and a company name should not match a keyword at all.
+    """
+    zones: list[Zone | None] = []
+
+    head = " ".join(
+        filter(None, [tailored.headline, getattr(tailored.summary, "text", "")])
+    )
+    zones.append(_zone("summary", head, ZONE_SUMMARY))
+
+    for rank, exp in enumerate(_experience_in_recency_order(tailored)):
+        weight = _role_weight(rank)
+        body = " ".join(b.text for b in exp.bullets)
+        # The title line is evidence of the role, so it earns the role's
+        # weight; the company and dates are not evidence of anything.
+        heading = " ".join(filter(None, [exp.title]))
+        zones.append(_zone(f"experience[{rank}]", f"{heading} {body}", weight))
+
+    for proj in tailored.projects:
+        text = " ".join([proj.name, *(b.text for b in proj.bullets)])
+        zones.append(_zone("project", text, ZONE_PROJECT))
+
+    skills = " ".join(
+        " ".join([group.category, *group.items]) for group in tailored.skills
+    )
+    zones.append(_zone("skills", skills, ZONE_SKILLS))
+
+    edu = " ".join(
+        " ".join(filter(None, [e.institution, e.degree])) for e in tailored.education
+    )
+    certs = " ".join(c.text for c in tailored.certifications)
+    learned = " ".join(filter(None, [edu, certs]))
+    zones.append(_zone("education", learned, ZONE_EDUCATION))
+
+    other = " ".join(
+        " ".join([sec.heading, *(b.text for b in sec.bullets)])
+        for sec in tailored.other_sections
+    )
+    zones.append(_zone("other", other, ZONE_OTHER))
+
+    return [z for z in zones if z is not None]
+
+
+def score_keyword_coverage(
+    job: JobSpec,
+    resume: str,
+    zones: list[Zone] | None = None,
+) -> KeywordOutcomeV2:
     """Weighted coverage that saturates at the first mention.
 
     One occurrence earns the term's full weight and every further occurrence
     earns nothing, which is the whole point: repetition cannot buy points, so
     the only way to raise this number is to cover a term the document did not
     cover before.
+
+    With ``zones``, a term earns the weight of the best place it appears
+    rather than a flat full mark. Saturation is unchanged: the maximum is
+    taken across zones, never a sum, so mentioning a term in all six regions
+    is worth exactly what mentioning it in the best one is worth.
+
+    ``zones=None`` keeps the flat behaviour, which is what the direct callers
+    in the test suite and the fixture exporter use.
     """
     if not job.keywords:
         return KeywordOutcomeV2(matched=[], missing=[], counts={}, score=0.0)
@@ -281,6 +487,7 @@ def score_keyword_coverage(job: JobSpec, resume: str) -> KeywordOutcomeV2:
     matched: list[str] = []
     missing: list[str] = []
     counts: dict[str, int] = {}
+    placements: dict[str, str] = {}
     earned = possible = 0.0
 
     for keyword in job.keywords:
@@ -289,18 +496,112 @@ def score_keyword_coverage(job: JobSpec, resume: str) -> KeywordOutcomeV2:
         forms = [keyword.term, *keyword.variants]
         occurrences = sum(_count(form, resume) for form in forms)
         counts[keyword.term] = occurrences
-        if occurrences:
-            matched.append(keyword.term)
-            earned += weight  # saturated: occurrences > 1 adds nothing
-        else:
+
+        if not occurrences:
             missing.append(keyword.term)
+            continue
+
+        matched.append(keyword.term)
+
+        if zones is None:
+            earned += weight
+            continue
+
+        best = 0.0
+        where = ""
+        for zone in zones:
+            if any(_count(form, zone.text) for form in forms):
+                if zone.weight > best:
+                    best, where = zone.weight, zone.name
+
+        if best == 0.0:
+            # Found in the flat text but in no zone: a company name, a date
+            # line, something the zones deliberately exclude. Treat it as the
+            # weakest kind of claim rather than as absent.
+            best, where = ZONE_SKILLS, "unplaced"
+
+        earned += weight * best
+        placements[keyword.term] = where
 
     return KeywordOutcomeV2(
         matched=matched,
         missing=missing,
         counts=counts,
         score=(earned / possible * 100) if possible else 0.0,
+        placements=placements,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Title and seniority                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def _title_tokens(title: str) -> tuple[frozenset[str], int | None]:
+    """The role words, and the seniority the title declares."""
+    words = [w for w in re.split(r"[^a-z0-9+#]+", normalise(title)) if w]
+    band: int | None = None
+    role: list[str] = []
+    for word in words:
+        if word in SENIORITY_BANDS:
+            level = SENIORITY_BANDS[word]
+            # The highest marker wins: "senior engineering manager" is a
+            # manager, not a senior.
+            band = level if band is None else max(band, level)
+            continue
+        if word in TITLE_STOPWORDS:
+            continue
+        role.append(word)
+    return frozenset(role), band
+
+
+def _most_recent_title(tailored: TailoredResume) -> str:
+    order = _experience_in_recency_order(tailored)
+    return order[0].title if order else ""
+
+
+def score_title_match(job: JobSpec, tailored: TailoredResume) -> float:
+    """How close the candidate's current title is to the one being filled.
+
+    Two parts, because they fail differently. Role overlap asks whether this
+    is the same kind of job; seniority distance asks whether it is the same
+    rung. A backend engineer applying to a backend manager role scores full
+    marks on the first and loses heavily on the second, which is exactly how
+    that application gets read.
+
+    Recall against the posting, not symmetric overlap: a longer candidate
+    title is not worse for containing extra words. "Senior Backend Engineer,
+    Payments" covers "Backend Engineer" completely.
+    """
+    target_role, target_band = _title_tokens(job.title)
+    if not target_role:
+        return TITLE_UNKNOWN
+
+    current = _most_recent_title(tailored)
+    cand_role, cand_band = _title_tokens(current)
+    head_role, _ = _title_tokens(tailored.headline)
+
+    def recall(tokens: frozenset[str]) -> float:
+        if not tokens:
+            return 0.0
+        return len(target_role & tokens) / len(target_role) * 100.0
+
+    # The headline is self-declared and rewritten by this very pipeline, so it
+    # is worth slightly less than a title an employer actually gave.
+    overlap = max(recall(cand_role), recall(head_role) * 0.9)
+
+    required = DEFAULT_BAND if target_band is None else target_band
+    held = DEFAULT_BAND if cand_band is None else cand_band
+    gap = held - required
+
+    if gap < 0:
+        penalty = min(UNDERQUALIFIED_CAP, -gap * UNDERQUALIFIED_PER_LEVEL)
+    elif gap > 0:
+        penalty = min(OVERQUALIFIED_CAP, gap * OVERQUALIFIED_PER_LEVEL)
+    else:
+        penalty = 0.0
+
+    return max(0.0, min(100.0, overlap - penalty))
 
 
 def score_requirement_coverage(job: JobSpec, resume: str) -> float:
@@ -465,6 +766,7 @@ class ScoreBreakdownV2:
     overall: float
     keyword_coverage: float
     requirement_coverage: float
+    title_match: float
     evidence_density: float
     specificity: float
     experience_match: float
@@ -475,6 +777,7 @@ class ScoreBreakdownV2:
     missing_keywords: list[str]
     recoverable_keywords: list[str]
     keyword_counts: dict[str, int]
+    keyword_placements: dict[str, str]
     warnings: list[str]
 
     def as_dict(self) -> dict:
@@ -484,6 +787,7 @@ class ScoreBreakdownV2:
         return (
             f"Breakdown — keywords {self.keyword_coverage:.0f}, "
             f"requirements {self.requirement_coverage:.0f}, "
+            f"title {self.title_match:.0f}, "
             f"evidence {self.evidence_density:.0f}, "
             f"specificity {self.specificity:.0f}, "
             f"experience {self.experience_match:.0f}; "
@@ -503,17 +807,26 @@ def compute_breakdown(
     tailored_text = resume_text_of(tailored)
     original_text = facts_text_of(facts)
 
-    keywords = score_keyword_coverage(job, tailored_text)
+    zones = keyword_zones(tailored)
+    keywords = score_keyword_coverage(job, tailored_text, zones)
     requirements = score_requirement_coverage(job, tailored_text)
+    title = score_title_match(job, tailored)
     evidence = score_evidence_density(tailored)
     specificity = score_specificity(tailored)
     experience = score_experience_match(job, facts)
 
     # How much of this posting the document actually speaks to, 0-100.
-    relevance_weight = WEIGHTS["keyword_coverage"] + WEIGHTS["requirement_coverage"]
+    # Title match belongs here: a document for a different kind of job is not
+    # relevant to this one however many of its nouns happen to overlap.
+    relevance_weight = (
+        WEIGHTS["keyword_coverage"]
+        + WEIGHTS["requirement_coverage"]
+        + WEIGHTS["title_match"]
+    )
     relevance = (
         keywords.score * WEIGHTS["keyword_coverage"]
         + requirements * WEIGHTS["requirement_coverage"]
+        + title * WEIGHTS["title_match"]
     ) / relevance_weight
 
     gate = QUALITY_GATE_FLOOR + (1.0 - QUALITY_GATE_FLOOR) * (relevance / 100.0)
@@ -521,6 +834,7 @@ def compute_breakdown(
     raw = (
         keywords.score * WEIGHTS["keyword_coverage"]
         + requirements * WEIGHTS["requirement_coverage"]
+        + title * WEIGHTS["title_match"]
         + (
             evidence * WEIGHTS["evidence_density"]
             + specificity * WEIGHTS["specificity"]
@@ -552,6 +866,7 @@ def compute_breakdown(
         overall=round(overall, 1),
         keyword_coverage=round(keywords.score, 1),
         requirement_coverage=round(requirements, 1),
+        title_match=round(title, 1),
         evidence_density=round(evidence, 1),
         specificity=round(specificity, 1),
         experience_match=round(experience, 1),
@@ -562,6 +877,7 @@ def compute_breakdown(
         missing_keywords=truly_missing,
         recoverable_keywords=recoverable,
         keyword_counts=keywords.counts,
+        keyword_placements=keywords.placements,
         warnings=section_warnings(tailored),
     )
 
@@ -588,6 +904,7 @@ def compute_ats_report(
             # genuinely missing section now surfaces.
             section_completeness=100.0,
             experience_match=b.experience_match,
+            title_match=b.title_match,
             evidence_density=b.evidence_density,
             specificity=b.specificity,
             relevance_gate=b.quality_gate,
@@ -597,6 +914,19 @@ def compute_ats_report(
         missing_keywords=b.missing_keywords,
         recoverable_keywords=b.recoverable_keywords,
         recommendations=_recommendations(b, job, facts),
+    )
+
+
+# Zones that are a claim rather than evidence. A term sitting only in one of
+# these is the cheapest real improvement available: it is already true, it is
+# already on the page, and it only needs attaching to something that happened.
+CLAIM_ZONES = frozenset({"skills", "summary", "education", "other", "unplaced"})
+
+
+def stranded_terms(b: ScoreBreakdownV2) -> list[str]:
+    """Matched terms that never appear in a bullet."""
+    return sorted(
+        term for term, where in b.keyword_placements.items() if where in CLAIM_ZONES
     )
 
 
@@ -612,6 +942,22 @@ def _recommendations(b: ScoreBreakdownV2, job: JobSpec, facts: ResumeFacts) -> l
         out.append(
             "Keyword coverage is low. These cannot be added truthfully, so treat them as a "
             f"skills gap rather than an editing task: {', '.join(b.missing_keywords[:6])}."
+        )
+    stranded = stranded_terms(b)
+    if stranded:
+        out.append(
+            "These are on the page but only as a claim — they appear in a list or the "
+            "summary, never in a bullet describing work: "
+            f"{', '.join(stranded[:6])}. Moving one into the experience it actually "
+            "belongs to is worth more than adding a new term anywhere."
+        )
+    if b.title_match < 55:
+        out.append(
+            f"Your most recent title reads a long way from \"{job.title}\". That is the "
+            "first line a screener compares and the most common reason a relevant "
+            "resume is passed over. If the work genuinely matches, say so in the "
+            "headline; if it does not, this posting is a stretch and worth weighing "
+            "against a closer one."
         )
     if b.requirement_coverage < 60:
         required = [r.term for r in job.requirements if r.importance == Importance.REQUIRED]

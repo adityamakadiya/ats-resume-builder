@@ -371,6 +371,9 @@ class SubScores(BaseModel):
 
     evidence_density: float = 0.0
     specificity: float = 0.0
+    # How close the most recent title is to the one being filled, after a
+    # seniority adjustment. Defaulted so rows written before it deserialise.
+    title_match: float = 0.0
     # How far evidence and specificity were scaled back for a document that is
     # well written but not about this job. Well-set prose about unrelated work
     # should not score like a match.

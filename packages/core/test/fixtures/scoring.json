@@ -16,6 +16,7 @@
             "Redis": 0
           },
           "keyword_coverage": 0.0,
+          "keyword_placements": {},
           "matched_keywords": [],
           "missing_keywords": [
             "Node.js",
@@ -27,12 +28,13 @@
             "Kubernetes",
             "Kafka"
           ],
-          "overall": 0.0,
-          "quality_gate": 0.35,
+          "overall": 9.5,
+          "quality_gate": 0.48,
           "recoverable_keywords": [],
-          "relevance": 0.0,
+          "relevance": 20.0,
           "requirement_coverage": 0.0,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         },
         "matched_keywords": [],
         "missing_keywords": [
@@ -45,7 +47,7 @@
           "REST",
           "Redis"
         ],
-        "overall": 0.0,
+        "overall": 9.5,
         "penalty_total": 5.0,
         "recoverable_keywords": [],
         "sub_scores": {
@@ -53,10 +55,11 @@
           "experience_match": 50.0,
           "keyword_match": 0.0,
           "penalty": 5.0,
-          "relevance_gate": 0.35,
+          "relevance_gate": 0.48,
           "section_completeness": 100.0,
           "skills_coverage": 0.0,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         }
       },
       "name": "D1 irrelevant filler",
@@ -138,6 +141,9 @@
             "Redis": 0
           },
           "keyword_coverage": 19.2,
+          "keyword_placements": {
+            "Node.js": "experience[0]"
+          },
           "matched_keywords": [
             "Node.js"
           ],
@@ -150,12 +156,13 @@
             "Kubernetes",
             "Kafka"
           ],
-          "overall": 12.7,
-          "quality_gate": 0.489,
+          "overall": 20.8,
+          "quality_gate": 0.591,
           "recoverable_keywords": [],
-          "relevance": 21.3,
+          "relevance": 37.1,
           "requirement_coverage": 25.0,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Node.js"
@@ -169,7 +176,7 @@
           "REST",
           "Redis"
         ],
-        "overall": 12.7,
+        "overall": 20.8,
         "penalty_total": 4.0,
         "recoverable_keywords": [],
         "sub_scores": {
@@ -177,10 +184,11 @@
           "experience_match": 50.0,
           "keyword_match": 19.2,
           "penalty": 4.0,
-          "relevance_gate": 0.489,
+          "relevance_gate": 0.591,
           "section_completeness": 100.0,
           "skills_coverage": 25.0,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         }
       },
       "name": "D2 weak duties",
@@ -268,7 +276,15 @@
             "REST": 2,
             "Redis": 1
           },
-          "keyword_coverage": 84.6,
+          "keyword_coverage": 66.7,
+          "keyword_placements": {
+            "Docker": "experience[0]",
+            "Express": "summary",
+            "Node.js": "summary",
+            "PostgreSQL": "experience[0]",
+            "REST": "experience[0]",
+            "Redis": "skills"
+          },
           "matched_keywords": [
             "Node.js",
             "PostgreSQL",
@@ -281,12 +297,13 @@
             "Kubernetes",
             "Kafka"
           ],
-          "overall": 40.6,
-          "quality_gate": 0.789,
+          "overall": 39.8,
+          "quality_gate": 0.77,
           "recoverable_keywords": [],
-          "relevance": 67.5,
+          "relevance": 64.6,
           "requirement_coverage": 37.5,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Docker",
@@ -300,18 +317,19 @@
           "Kafka",
           "Kubernetes"
         ],
-        "overall": 40.6,
+        "overall": 39.8,
         "penalty_total": 1.5,
         "recoverable_keywords": [],
         "sub_scores": {
           "evidence_density": 0.0,
           "experience_match": 50.0,
-          "keyword_match": 84.6,
+          "keyword_match": 66.7,
           "penalty": 1.5,
-          "relevance_gate": 0.789,
+          "relevance_gate": 0.77,
           "section_completeness": 100.0,
           "skills_coverage": 37.5,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         }
       },
       "name": "D3 duty statements",
@@ -401,7 +419,15 @@
             "REST": 2,
             "Redis": 2
           },
-          "keyword_coverage": 84.6,
+          "keyword_coverage": 70.8,
+          "keyword_placements": {
+            "Docker": "experience[0]",
+            "Express": "experience[0]",
+            "Node.js": "summary",
+            "PostgreSQL": "experience[0]",
+            "REST": "experience[0]",
+            "Redis": "summary"
+          },
           "matched_keywords": [
             "Node.js",
             "PostgreSQL",
@@ -414,12 +440,13 @@
             "Kubernetes",
             "Kafka"
           ],
-          "overall": 72.8,
-          "quality_gate": 0.907,
+          "overall": 71.5,
+          "quality_gate": 0.881,
           "recoverable_keywords": [],
-          "relevance": 85.7,
+          "relevance": 81.6,
           "requirement_coverage": 87.5,
-          "specificity": 33.3
+          "specificity": 33.3,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Docker",
@@ -433,18 +460,19 @@
           "Kafka",
           "Kubernetes"
         ],
-        "overall": 72.8,
+        "overall": 71.5,
         "penalty_total": 2.0,
         "recoverable_keywords": [],
         "sub_scores": {
           "evidence_density": 100.0,
           "experience_match": 50.0,
-          "keyword_match": 84.6,
+          "keyword_match": 70.8,
           "penalty": 2.0,
-          "relevance_gate": 0.907,
+          "relevance_gate": 0.881,
           "section_completeness": 100.0,
           "skills_coverage": 87.5,
-          "specificity": 33.3
+          "specificity": 33.3,
+          "title_match": 100.0
         }
       },
       "name": "D4 good outcomes",
@@ -535,7 +563,17 @@
             "REST": 1,
             "Redis": 3
           },
-          "keyword_coverage": 100.0,
+          "keyword_coverage": 75.8,
+          "keyword_placements": {
+            "Docker": "summary",
+            "Express": "summary",
+            "Kafka": "experience[0]",
+            "Kubernetes": "experience[0]",
+            "Node.js": "summary",
+            "PostgreSQL": "experience[0]",
+            "REST": "summary",
+            "Redis": "experience[0]"
+          },
           "matched_keywords": [
             "Node.js",
             "PostgreSQL",
@@ -547,12 +585,13 @@
             "Kafka"
           ],
           "missing_keywords": [],
-          "overall": 88.2,
-          "quality_gate": 1.0,
+          "overall": 81.0,
+          "quality_gate": 0.921,
           "recoverable_keywords": [],
-          "relevance": 100.0,
+          "relevance": 87.9,
           "requirement_coverage": 100.0,
-          "specificity": 75.0
+          "specificity": 75.0,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Docker",
@@ -565,18 +604,19 @@
           "Redis"
         ],
         "missing_keywords": [],
-        "overall": 88.2,
+        "overall": 81.0,
         "penalty_total": 3.0,
         "recoverable_keywords": [],
         "sub_scores": {
           "evidence_density": 100.0,
           "experience_match": 50.0,
-          "keyword_match": 100.0,
+          "keyword_match": 75.8,
           "penalty": 3.0,
-          "relevance_gate": 1.0,
+          "relevance_gate": 0.921,
           "section_completeness": 100.0,
           "skills_coverage": 100.0,
-          "specificity": 75.0
+          "specificity": 75.0,
+          "title_match": 100.0
         }
       },
       "name": "D5 strong mechanisms",
@@ -676,7 +716,15 @@
             "REST": 2,
             "Redis": 2
           },
-          "keyword_coverage": 84.6,
+          "keyword_coverage": 70.8,
+          "keyword_placements": {
+            "Docker": "experience[0]",
+            "Express": "experience[0]",
+            "Node.js": "summary",
+            "PostgreSQL": "experience[0]",
+            "REST": "experience[0]",
+            "Redis": "summary"
+          },
           "matched_keywords": [
             "Node.js",
             "PostgreSQL",
@@ -689,12 +737,13 @@
             "Kubernetes",
             "Kafka"
           ],
-          "overall": 72.8,
-          "quality_gate": 0.907,
+          "overall": 71.5,
+          "quality_gate": 0.881,
           "recoverable_keywords": [],
-          "relevance": 85.7,
+          "relevance": 81.6,
           "requirement_coverage": 87.5,
-          "specificity": 33.3
+          "specificity": 33.3,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Docker",
@@ -708,18 +757,19 @@
           "Kafka",
           "Kubernetes"
         ],
-        "overall": 72.8,
+        "overall": 71.5,
         "penalty_total": 2.0,
         "recoverable_keywords": [],
         "sub_scores": {
           "evidence_density": 100.0,
           "experience_match": 50.0,
-          "keyword_match": 84.6,
+          "keyword_match": 70.8,
           "penalty": 2.0,
-          "relevance_gate": 0.907,
+          "relevance_gate": 0.881,
           "section_completeness": 100.0,
           "skills_coverage": 87.5,
-          "specificity": 33.3
+          "specificity": 33.3,
+          "title_match": 100.0
         }
       },
       "name": "honest",
@@ -811,6 +861,16 @@
             "Redis": 5
           },
           "keyword_coverage": 100.0,
+          "keyword_placements": {
+            "Docker": "experience[0]",
+            "Express": "experience[0]",
+            "Kafka": "experience[0]",
+            "Kubernetes": "experience[0]",
+            "Node.js": "experience[0]",
+            "PostgreSQL": "experience[0]",
+            "REST": "experience[0]",
+            "Redis": "experience[0]"
+          },
           "matched_keywords": [
             "Node.js",
             "PostgreSQL",
@@ -822,12 +882,13 @@
             "Kafka"
           ],
           "missing_keywords": [],
-          "overall": 51.7,
-          "quality_gate": 0.911,
+          "overall": 55.2,
+          "quality_gate": 0.927,
           "recoverable_keywords": [],
-          "relevance": 86.4,
+          "relevance": 88.8,
           "requirement_coverage": 62.5,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         },
         "matched_keywords": [
           "Docker",
@@ -840,7 +901,7 @@
           "Redis"
         ],
         "missing_keywords": [],
-        "overall": 51.7,
+        "overall": 55.2,
         "penalty_total": 14.5,
         "recoverable_keywords": [],
         "sub_scores": {
@@ -848,10 +909,11 @@
           "experience_match": 50.0,
           "keyword_match": 100.0,
           "penalty": 14.5,
-          "relevance_gate": 0.911,
+          "relevance_gate": 0.927,
           "section_completeness": 100.0,
           "skills_coverage": 62.5,
-          "specificity": 0.0
+          "specificity": 0.0,
+          "title_match": 100.0
         }
       },
       "name": "stuffed",

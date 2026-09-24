@@ -331,6 +331,9 @@ export const SubScoresSchema = z.object({
   experience_match: z.number().default(0),
   evidence_density: z.number().default(0),
   specificity: z.number().default(0),
+  // How close the most recent title is to the one being filled, after a
+  // seniority adjustment. Defaulted so rows written before it deserialise.
+  title_match: z.number().default(0),
   relevance_gate: z.number().default(1),
   penalty: z.number().default(0),
 });

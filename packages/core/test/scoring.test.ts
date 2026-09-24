@@ -26,6 +26,7 @@ interface ExpectedBreakdown {
   overall: number;
   keyword_coverage: number;
   requirement_coverage: number;
+  title_match: number;
   evidence_density: number;
   specificity: number;
   experience_match: number;
@@ -35,6 +36,7 @@ interface ExpectedBreakdown {
   missing_keywords: string[];
   recoverable_keywords: string[];
   keyword_counts: Record<string, number>;
+  keyword_placements: Record<string, string>;
 }
 
 interface Expected {
@@ -98,6 +100,7 @@ describe('scoring parity with the Python reference', () => {
     expect(breakdown.evidence_density, 'evidence_density').toBeCloseTo(eb.evidence_density, 1);
     expect(breakdown.specificity, 'specificity').toBeCloseTo(eb.specificity, 1);
     expect(breakdown.experience_match, 'experience_match').toBeCloseTo(eb.experience_match, 1);
+    expect(breakdown.title_match, 'title_match').toBeCloseTo(eb.title_match, 1);
     expect(breakdown.relevance, 'relevance').toBeCloseTo(eb.relevance, 1);
     expect(breakdown.quality_gate, 'quality_gate').toBeCloseTo(eb.quality_gate, 1);
 
@@ -112,6 +115,20 @@ describe('scoring parity with the Python reference', () => {
     for (const [term, count] of Object.entries(eb.keyword_counts)) {
       expect(breakdown.keyword_counts[term], `keyword_counts['${term}']`).toBe(count);
     }
+
+    /*
+      Where each term earned its weight. This is asserted separately from
+      keyword_coverage because it fails so much more legibly: if the two
+      recency orderings or the two zone builders ever drift, this says
+      "Kafka: experience[1] but expected experience[0]" instead of leaving a
+      number three points out and no clue which axis moved.
+    */
+    for (const [term, where] of Object.entries(eb.keyword_placements)) {
+      expect(breakdown.keyword_placements[term], `keyword_placements['${term}']`).toBe(where);
+    }
+    expect(Object.keys(breakdown.keyword_placements).sort()).toEqual(
+      Object.keys(eb.keyword_placements).sort(),
+    );
   });
 });
 

@@ -40,11 +40,16 @@ import {
 } from './text';
 
 export const WEIGHTS = {
-  keyword_coverage: 0.35,
-  requirement_coverage: 0.2,
+  keyword_coverage: 0.3,
+  requirement_coverage: 0.18,
+  // A recruiter reads the most recent title against the req title before
+  // reading anything else. Nothing in v2 measured it.
+  title_match: 0.12,
   evidence_density: 0.2,
   specificity: 0.15,
-  experience_match: 0.1,
+  // Down from 0.10: years-in-band is the weakest relevance signal and it was
+  // carrying weight that title match earns.
+  experience_match: 0.05,
 } as const;
 
 export const PENALTIES = {
@@ -60,6 +65,63 @@ export const PENALTIES = {
 
 /** Below this share of job relevance, prose quality stops earning full credit. */
 export const QUALITY_GATE_FLOOR = 0.35;
+
+/* ------------------------------------------------------------------ */
+/* Where a term appears, and what that is worth                        */
+/* ------------------------------------------------------------------ */
+/*
+  Coverage used to run over one flat string, so "Kubernetes" in the skills
+  list counted exactly as much as "Kubernetes" in the job the candidate is
+  doing right now. No recruiter reads those as the same claim, and the flat
+  version rewards the cheapest edit on the page: append the missing terms to
+  the skills list and the number goes up without the resume being any truer.
+
+  Every term is now worth the most valuable place it appears. Two axes:
+  evidenced (inside a bullet) versus claimed (a list), and how recent the
+  evidence is. A term in the current role still earns 1.0, so a resume whose
+  present job is the job being applied for can still reach 100.
+
+  These constants are mirrored in backend/src/atsresume/pipeline/scoring_v2.py
+  and the fixture check fails if the two disagree.
+*/
+export const ZONE_CURRENT_ROLE = 1.0;
+export const ZONE_ROLE_DECAY: readonly number[] = [1.0, 0.85, 0.72, 0.62];
+export const ZONE_ROLE_FLOOR = 0.6;
+export const ZONE_PROJECT = 0.8;
+export const ZONE_EDUCATION = 0.6;
+export const ZONE_SUMMARY = 0.55;
+export const ZONE_SKILLS = 0.5;
+export const ZONE_OTHER = 0.55;
+
+const PRESENT_RE = /\b(present|current|currently|now|ongoing|to date|till date|date)\b/i;
+const YEAR_RE = /\b(?:19|20)\d{2}\b/g;
+
+/** The ladder, as postings use it. No marker means mid. */
+export const SENIORITY_BANDS: Readonly<Record<string, number>> = {
+  intern: 0, internship: 0, trainee: 0, graduate: 0, fresher: 0,
+  junior: 1, jr: 1, entry: 1, associate: 1,
+  mid: 2, intermediate: 2,
+  senior: 3, sr: 3,
+  staff: 4, lead: 4, principal: 5, architect: 4, manager: 4,
+  head: 5, director: 6, vp: 7, chief: 8, cto: 8, ceo: 8,
+};
+export const DEFAULT_BAND = 2;
+
+export const UNDERQUALIFIED_PER_LEVEL = 20;
+export const UNDERQUALIFIED_CAP = 55;
+// Asymmetric on purpose: both directions get rejected, but a senior applying
+// down is screened out for fit and salary, not for being unable to do it.
+export const OVERQUALIFIED_PER_LEVEL = 10;
+export const OVERQUALIFIED_CAP = 30;
+
+export const TITLE_STOPWORDS: ReadonlySet<string> = new Set([
+  'a', 'an', 'the', 'and', 'or', 'of', 'for', 'to', 'in', 'at', 'with',
+  'i', 'ii', 'iii', 'iv', 'v', '1', '2', '3', '4', '5',
+  'engineer2', 'level', 'grade', 'band',
+]);
+
+/** The posting states no title often enough that 0 would lie and 100 would gift. */
+export const TITLE_UNKNOWN = 70;
 
 /* ------------------------------------------------------------------ */
 /* Vocabularies                                                        */
@@ -167,17 +229,127 @@ export interface KeywordOutcomeV2 {
   missing: string[];
   counts: Record<string, number>;
   score: number;
+  /** term -> the zone it earned its weight in. Empty under flat scoring. */
+  placements: Record<string, string>;
 }
 
-/** Weighted coverage that saturates at the first mention. */
-export function scoreKeywordCoverage(job: JobSpec, resume: string): KeywordOutcomeV2 {
+/**
+ * A region of the resume, and what a term found there is worth.
+ *
+ * `text` is normalised at construction, because `countTerm` normalises the
+ * needle and assumes the haystack already is.
+ */
+export interface Zone {
+  name: string;
+  text: string;
+  weight: number;
+}
+
+function isPresent(endDate: string): boolean {
+  return PRESENT_RE.test(endDate ?? '');
+}
+
+function latestYear(text: string): number {
+  const found = (text ?? '').match(YEAR_RE);
+  return found ? Math.max(...found.map(Number)) : 0;
+}
+
+/**
+ * Most recent role first.
+ *
+ * Resumes are conventionally reverse-chronological and the parser preserves
+ * document order, so the original index is the tie-breaker rather than the
+ * signal: a correctly ordered resume is unaffected, and one that is not gets
+ * read correctly anyway.
+ */
+export function experienceInRecencyOrder(
+  tailored: TailoredResume,
+): TailoredResume['experience'] {
+  return tailored.experience
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const ap = isPresent(a.entry.end_date) ? 1 : 0;
+      const bp = isPresent(b.entry.end_date) ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+      const ay = latestYear(a.entry.end_date);
+      const by = latestYear(b.entry.end_date);
+      if (ay !== by) return by - ay;
+      return a.index - b.index;
+    })
+    .map((pair) => pair.entry);
+}
+
+function roleWeight(rank: number): number {
+  return rank < ZONE_ROLE_DECAY.length ? ZONE_ROLE_DECAY[rank]! : ZONE_ROLE_FLOOR;
+}
+
+function zone(name: string, text: string, weight: number): Zone | null {
+  const body = normalise(text);
+  return body.trim() ? { name, text: body, weight } : null;
+}
+
+/**
+ * The document, cut into regions worth different amounts.
+ *
+ * Bullets are separated from the headings around them deliberately: a company
+ * name should not match a keyword at all, and a role title should not make
+ * every term in that role look evidenced.
+ */
+export function keywordZones(tailored: TailoredResume): Zone[] {
+  const out: Array<Zone | null> = [];
+
+  out.push(zone('summary', `${tailored.headline} ${tailored.summary.text}`, ZONE_SUMMARY));
+
+  experienceInRecencyOrder(tailored).forEach((exp, rank) => {
+    const body = exp.bullets.map((b) => b.text).join(' ');
+    out.push(zone(`experience[${rank}]`, `${exp.title} ${body}`, roleWeight(rank)));
+  });
+
+  for (const proj of tailored.projects) {
+    const text = [proj.name, ...proj.bullets.map((b) => b.text)].join(' ');
+    out.push(zone('project', text, ZONE_PROJECT));
+  }
+
+  const skills = tailored.skills
+    .map((group) => [group.category, ...group.items].join(' '))
+    .join(' ');
+  out.push(zone('skills', skills, ZONE_SKILLS));
+
+  const learned = [
+    ...tailored.education.map((e) => `${e.institution} ${e.degree}`),
+    ...tailored.certifications.map((c) => c.text),
+  ].join(' ');
+  out.push(zone('education', learned, ZONE_EDUCATION));
+
+  const other = tailored.other_sections
+    .map((sec) => [sec.heading, ...sec.bullets.map((b) => b.text)].join(' '))
+    .join(' ');
+  out.push(zone('other', other, ZONE_OTHER));
+
+  return out.filter((z): z is Zone => z !== null);
+}
+
+/**
+ * Weighted coverage that saturates at the first mention.
+ *
+ * With `zones`, a term earns the weight of the best place it appears rather
+ * than a flat full mark. Saturation is unchanged: the maximum is taken across
+ * zones, never a sum, so mentioning a term everywhere is worth exactly what
+ * mentioning it in the best place is worth.
+ */
+export function scoreKeywordCoverage(
+  job: JobSpec,
+  resume: string,
+  zones?: readonly Zone[],
+): KeywordOutcomeV2 {
   if (job.keywords.length === 0) {
-    return { matched: [], missing: [], counts: {}, score: 0 };
+    return { matched: [], missing: [], counts: {}, score: 0, placements: {} };
   }
 
   const matched: string[] = [];
   const missing: string[] = [];
   const counts: Record<string, number> = {};
+  const placements: Record<string, string> = {};
   let earned = 0;
   let possible = 0;
 
@@ -187,12 +359,39 @@ export function scoreKeywordCoverage(job: JobSpec, resume: string): KeywordOutco
     const forms = [keyword.term, ...keyword.variants];
     const occurrences = forms.reduce((n, form) => n + countTerm(form, resume), 0);
     counts[keyword.term] = occurrences;
-    if (occurrences) {
-      matched.push(keyword.term);
-      earned += weight; // saturated: occurrences > 1 adds nothing
-    } else {
+
+    if (!occurrences) {
       missing.push(keyword.term);
+      continue;
     }
+
+    matched.push(keyword.term);
+
+    if (!zones) {
+      earned += weight; // saturated: occurrences > 1 adds nothing
+      continue;
+    }
+
+    let best = 0;
+    let where = '';
+    for (const z of zones) {
+      if (forms.some((form) => countTerm(form, z.text))) {
+        if (z.weight > best) {
+          best = z.weight;
+          where = z.name;
+        }
+      }
+    }
+
+    if (best === 0) {
+      // In the flat text but in no zone: a company name, a date line. Treat
+      // it as the weakest kind of claim rather than as absent.
+      best = ZONE_SKILLS;
+      where = 'unplaced';
+    }
+
+    earned += weight * best;
+    placements[keyword.term] = where;
   }
 
   return {
@@ -200,7 +399,69 @@ export function scoreKeywordCoverage(job: JobSpec, resume: string): KeywordOutco
     missing,
     counts,
     score: possible ? (earned / possible) * 100 : 0,
+    placements,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Title and seniority                                                 */
+/* ------------------------------------------------------------------ */
+
+function titleTokens(title: string): { role: Set<string>; band: number | null } {
+  const words = normalise(title).split(/[^a-z0-9+#]+/).filter(Boolean);
+  let band: number | null = null;
+  const role: string[] = [];
+  for (const word of words) {
+    const level = SENIORITY_BANDS[word];
+    if (level !== undefined) {
+      // The highest marker wins: "senior engineering manager" is a manager.
+      band = band === null ? level : Math.max(band, level);
+      continue;
+    }
+    if (TITLE_STOPWORDS.has(word)) continue;
+    role.push(word);
+  }
+  return { role: new Set(role), band };
+}
+
+/**
+ * How close the candidate's current title is to the one being filled.
+ *
+ * Two parts, because they fail differently. Role overlap asks whether this is
+ * the same kind of job; seniority distance asks whether it is the same rung.
+ *
+ * Recall against the posting, not symmetric overlap: a longer candidate title
+ * is not worse for carrying extra words.
+ */
+export function scoreTitleMatch(job: JobSpec, tailored: TailoredResume): number {
+  const target = titleTokens(job.title);
+  if (target.role.size === 0) return TITLE_UNKNOWN;
+
+  const order = experienceInRecencyOrder(tailored);
+  const current = order.length > 0 ? order[0]!.title : '';
+  const cand = titleTokens(current);
+  const head = titleTokens(tailored.headline);
+
+  const recall = (tokens: Set<string>): number => {
+    if (tokens.size === 0) return 0;
+    let hits = 0;
+    for (const t of target.role) if (tokens.has(t)) hits += 1;
+    return (hits / target.role.size) * 100;
+  };
+
+  // The headline is self-declared and rewritten by this very pipeline, so it
+  // is worth slightly less than a title an employer actually gave.
+  const overlap = Math.max(recall(cand.role), recall(head.role) * 0.9);
+
+  const required = target.band === null ? DEFAULT_BAND : target.band;
+  const held = cand.band === null ? DEFAULT_BAND : cand.band;
+  const gap = held - required;
+
+  let penalty = 0;
+  if (gap < 0) penalty = Math.min(UNDERQUALIFIED_CAP, -gap * UNDERQUALIFIED_PER_LEVEL);
+  else if (gap > 0) penalty = Math.min(OVERQUALIFIED_CAP, gap * OVERQUALIFIED_PER_LEVEL);
+
+  return Math.max(0, Math.min(100, overlap - penalty));
 }
 
 /** Stated requirements, with a must-have worth twice a nice-to-have. */
@@ -363,6 +624,7 @@ export interface ScoreBreakdownV2 {
   overall: number;
   keyword_coverage: number;
   requirement_coverage: number;
+  title_match: number;
   evidence_density: number;
   specificity: number;
   experience_match: number;
@@ -373,6 +635,7 @@ export interface ScoreBreakdownV2 {
   missing_keywords: string[];
   recoverable_keywords: string[];
   keyword_counts: Record<string, number>;
+  keyword_placements: Record<string, string>;
   warnings: string[];
 }
 
@@ -381,6 +644,7 @@ export function summaryLine(b: ScoreBreakdownV2): string {
   return (
     `Breakdown — keywords ${fixed(b.keyword_coverage, 0)}, ` +
     `requirements ${fixed(b.requirement_coverage, 0)}, ` +
+    `title ${fixed(b.title_match, 0)}, ` +
     `evidence ${fixed(b.evidence_density, 0)}, ` +
     `specificity ${fixed(b.specificity, 0)}, ` +
     `experience ${fixed(b.experience_match, 0)}; ` +
@@ -414,17 +678,23 @@ export function computeBreakdown(
   const tailoredText = resumeTextOf(tailored);
   const originalText = factsTextOf(facts);
 
-  const keywords = scoreKeywordCoverage(job, tailoredText);
+  const zones = keywordZones(tailored);
+  const keywords = scoreKeywordCoverage(job, tailoredText, zones);
   const requirements = scoreRequirementCoverage(job, tailoredText);
+  const title = scoreTitleMatch(job, tailored);
   const evidence = scoreEvidenceDensity(tailored);
   const specificity = scoreSpecificity(tailored);
   const experience = scoreExperienceMatch(job, facts);
 
   // How much of this posting the document actually speaks to, 0-100.
-  const relevanceWeight = WEIGHTS.keyword_coverage + WEIGHTS.requirement_coverage;
+  // Title match belongs here: a document for a different kind of job is not
+  // relevant to this one however many of its nouns happen to overlap.
+  const relevanceWeight =
+    WEIGHTS.keyword_coverage + WEIGHTS.requirement_coverage + WEIGHTS.title_match;
   const relevance =
     (keywords.score * WEIGHTS.keyword_coverage +
-      requirements * WEIGHTS.requirement_coverage) /
+      requirements * WEIGHTS.requirement_coverage +
+      title * WEIGHTS.title_match) /
     relevanceWeight;
 
   const gate = QUALITY_GATE_FLOOR + (1 - QUALITY_GATE_FLOOR) * (relevance / 100);
@@ -432,6 +702,7 @@ export function computeBreakdown(
   const raw =
     keywords.score * WEIGHTS.keyword_coverage +
     requirements * WEIGHTS.requirement_coverage +
+    title * WEIGHTS.title_match +
     (evidence * WEIGHTS.evidence_density + specificity * WEIGHTS.specificity) * gate +
     experience * WEIGHTS.experience_match;
 
@@ -452,6 +723,7 @@ export function computeBreakdown(
     overall: pyRound(overall, 1),
     keyword_coverage: pyRound(keywords.score, 1),
     requirement_coverage: pyRound(requirements, 1),
+    title_match: pyRound(title, 1),
     evidence_density: pyRound(evidence, 1),
     specificity: pyRound(specificity, 1),
     experience_match: pyRound(experience, 1),
@@ -462,6 +734,7 @@ export function computeBreakdown(
     missing_keywords: trulyMissing,
     recoverable_keywords: recoverable,
     keyword_counts: keywords.counts,
+    keyword_placements: keywords.placements,
     warnings: sectionWarnings(tailored),
   };
 }
@@ -482,6 +755,7 @@ export function computeAtsReport(
       // genuinely missing section now surfaces.
       section_completeness: 100,
       experience_match: b.experience_match,
+      title_match: b.title_match,
       evidence_density: b.evidence_density,
       specificity: b.specificity,
       relevance_gate: b.quality_gate,
@@ -492,6 +766,23 @@ export function computeAtsReport(
     recoverable_keywords: b.recoverable_keywords,
     recommendations: recommendations(b, job, facts),
   };
+}
+
+/**
+ * Zones that are a claim rather than evidence. A term sitting only in one of
+ * these is the cheapest real improvement available: already true, already on
+ * the page, and needing only to be attached to something that happened.
+ */
+export const CLAIM_ZONES: ReadonlySet<string> = new Set([
+  'skills', 'summary', 'education', 'other', 'unplaced',
+]);
+
+/** Matched terms that never appear in a bullet. */
+export function strandedTerms(b: ScoreBreakdownV2): string[] {
+  return Object.entries(b.keyword_placements)
+    .filter(([, where]) => CLAIM_ZONES.has(where))
+    .map(([term]) => term)
+    .sort();
 }
 
 function recommendations(
@@ -511,6 +802,24 @@ function recommendations(
     out.push(
       'Keyword coverage is low. These cannot be added truthfully, so treat them as a ' +
         `skills gap rather than an editing task: ${b.missing_keywords.slice(0, 6).join(', ')}.`,
+    );
+  }
+  const stranded = strandedTerms(b);
+  if (stranded.length > 0) {
+    out.push(
+      'These are on the page but only as a claim — they appear in a list or the ' +
+        'summary, never in a bullet describing work: ' +
+        `${stranded.slice(0, 6).join(', ')}. Moving one into the experience it ` +
+        'actually belongs to is worth more than adding a new term anywhere.',
+    );
+  }
+  if (b.title_match < 55) {
+    out.push(
+      `Your most recent title reads a long way from "${job.title}". That is the ` +
+        'first line a screener compares and the most common reason a relevant ' +
+        'resume is passed over. If the work genuinely matches, say so in the ' +
+        'headline; if it does not, this posting is a stretch and worth weighing ' +
+        'against a closer one.',
     );
   }
   if (b.requirement_coverage < 60) {
