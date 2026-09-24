@@ -1,5 +1,13 @@
 /**
- * The whole trip, signed in: upload, template, editor, edit, undo, download.
+ * The whole trip: upload, template, posting, editor, edit, undo, download.
+ *
+ * The posting is a step of the funnel now, between the template and the
+ * editor, and this suite takes the skip through it rather than the tailor.
+ * That is a deliberate limit: running the real tailor here would spend four
+ * model calls and up to five minutes on every run of a suite whose job is
+ * the plumbing, and the plumbing is the same either way. What it costs is
+ * the coverage of a moving score, and what replaces it is the assertion
+ * that matters more now: an editor with no posting shows no number at all.
  *
  * These are serial and share one resume on purpose. Each step is the
  * precondition for the next, and creating a fresh upload per test would mean
@@ -54,11 +62,20 @@ test("the two column template card carries its parser warning", async ({ page })
   ).toBeVisible();
 });
 
-test("choosing a template opens the editor", async ({ page }) => {
+test("choosing a template leads to the posting step, and skipping it opens the editor", async ({
+  page,
+}) => {
   await page.goto(`/start/template?document=${documentId}`);
 
   await page.getByRole("button", { name: /standard/i }).first().click();
   await page.getByRole("button", { name: /use this template|continue|create/i }).first().click();
+
+  // Step three, with the upload still attached to it.
+  await page.waitForURL(/\/start\/job\?/, { timeout: 60_000 });
+  expect(new URL(page.url()).searchParams.get("document")).toBe(documentId);
+  await expect(page.getByText(/step 3 of 3/i)).toBeVisible();
+
+  await page.getByRole("button", { name: /skip for now/i }).click();
 
   await page.waitForURL(new RegExp(`/resume/${UUID.source}`), { timeout: 60_000 });
   resumeId = new URL(page.url()).pathname.split("/").pop()!;
@@ -68,8 +85,9 @@ test("choosing a template opens the editor", async ({ page }) => {
   await expect(page.getByText(/this page could not be found/i)).toHaveCount(0);
   await expect(page.getByText(/something went wrong/i)).toHaveCount(0);
 
-  // The three columns are there.
-  await expect(page.getByRole("heading", { name: /score/i })).toBeVisible();
+  // The three columns are there. No score, because nothing was skipped
+  // into existence: the invitation stands where the number would go.
+  await expect(page.getByRole("heading", { name: /add the job posting/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /^download$/i })).toBeVisible();
 });
 
@@ -93,25 +111,31 @@ test("the editor shows the uploaded candidate, not the fixture", async ({ page }
   await expect(banner).toHaveCount(0);
 });
 
-test("typing in a field moves the score within 500ms", async ({ page }) => {
+/*
+  This used to be "typing in a field moves the score within 500ms", against a
+  score that existed only because the editor fell back to a fixture posting
+  for every resume that had none. The fallback is gone, so on this resume
+  there is no score to move and asserting one would be asserting the bug.
+
+  What is asserted instead is the pair that has to hold together: no number,
+  and a document that is still completely editable. An empty state that also
+  froze the editor would be the worse half of the old behaviour.
+*/
+test("with no posting there is no number, and the document still takes an edit", async ({
+  page,
+}) => {
   await page.goto(`/resume/${resumeId}?document=${documentId}`);
 
-  const score = page.locator('[aria-label^="ATS score"]');
-  await expect(score).toBeVisible();
-
-  const before = await score.getAttribute("aria-label");
+  await expect(
+    page.locator('[aria-label^="ATS score"]'),
+    "a score with no posting behind it is computed against nothing"
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /add a posting/i })).toBeVisible();
 
   const summary = page.getByLabel("Summary");
   await summary.click();
-  // A term the sample job asks for, so the score has to react.
-  await summary.fill(
-    "Staff platform engineer. Go, Kubernetes, Terraform, gRPC, Apache Flink, Rust, idempotency."
-  );
-
-  await expect(async () => {
-    const after = await score.getAttribute("aria-label");
-    expect(after, "the score did not react to an edit").not.toBe(before);
-  }).toPass({ timeout: 500, intervals: [50, 50, 50, 100] });
+  await summary.fill("Staff platform engineer. Go, Kubernetes, Terraform, gRPC.");
+  await expect(summary).toHaveValue(/Staff platform engineer/);
 });
 
 test("undo restores the previous text", async ({ page }) => {

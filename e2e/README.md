@@ -16,7 +16,7 @@ at a database you care about.
 
 ```
 e2e/
-  tier1/               normal dev server                       29 tests
+  tier1/               normal dev server                       42 tests
   tier1-unconfigured/  Supabase vars blanked                    4 tests
   tier2/               the full funnel, real DB and model       7 tests
   tier3/               no server at all, file:// fixtures      37 tests
@@ -45,7 +45,7 @@ npm run e2e:install     # once: fetch the Chromium build
 | Last report | `npm run e2e:report` |
 
 `npm run e2e:ci` is `--project=tier1 --project=tier1-unconfigured
---project=tier3`, 70 tests, about thirty seconds cold. That is the command
+--project=tier3`, 83 tests, about a minute cold. That is the command
 for a CI job. Tier 2 is left out on purpose; see below.
 
 A dev server is started automatically, and reused if one is already up
@@ -63,6 +63,16 @@ Runs anywhere, and is the tier that must stay green.
 `/login` is gone, so the four specs that lived on it moved to `/start` and
 `/resumes`, which are the two screens a visit now begins on.
 
+- `/start/job`, the third step, renders: the counter reading 3 of 3, both
+  ways of giving a posting, the login-wall warning on the link input, and a
+  skip that names what skipping costs. Switching inputs keeps what was
+  typed. `?document=` survives the Back link. No em dash, no en dash.
+- Skipping the posting writes a real resume row through `POST /api/resumes`
+  and opens the editor on it. That editor shows the invitation and **no
+  number**: a score with no posting behind it is computed against a fixture
+  posting for a job the candidate never applied to, it looks completely
+  correct, and it is the fiction this step exists to prevent. The prompt's
+  button opens the tailor panel over a document that is still on screen.
 - `/start` renders: the step counter, the dropzone, the blank template
   button. And the word "verified" appears nowhere on it, or on `/resumes`.
   The product's claim is that a rewrite is *traced* to a line the candidate
@@ -76,12 +86,13 @@ Runs anywhere, and is the tier that must stay green.
   file: the property was not deleted, it was turned over.
 - `/resumes` offers nothing to sign out of. A dead "Sign out" control is
   worse than no control, because it looks like there is a session behind it.
-- `/start` and `/resumes` at 375px: no horizontal scroll, nothing
+- `/start`, `/start/job` and `/resumes` at 375px: no horizontal scroll, nothing
   individually overflowing, both primary actions in the viewport, at least
   40px tall and hittable, and the mobile navigation drawer opens.
 - Keyboard: one full tab cycle is skip link, dropzone, blank template, each
   control draws a visible focus ring, and the skip link reaches `#main`.
-- axe on `/start` and `/resumes`, clean and in the dropzone's error state.
+- axe on `/start`, `/start/job` (both inputs) and `/resumes`, clean and in
+  the dropzone's error state.
   The threshold is serious and
   critical, and `support/a11y.ts` will not be lowered to make a run green:
   the first run of this suite found seven serious contrast violations on the
@@ -156,10 +167,18 @@ destructive in the sense that it leaves data behind. It also needs migration
 `user_id`.
 
 What it covers: upload a PDF and land on `/start/template?document=<uuid>`,
-pick a template and land on a working editor at `/resume/<uuid>`, the score
-moving within 500ms of a keystroke, undo restoring the previous text, the two
-column card carrying its parser warning, and a download whose first bytes are
-`%PDF-`.
+pick a template and land on `/start/job?document=<uuid>&template=<id>`, skip
+the posting and land on a working editor at `/resume/<uuid>`, that editor
+showing the no-posting invitation rather than a number while still taking an
+edit, undo restoring the previous text, the two column card carrying its
+parser warning, and a download whose first bytes are `%PDF-`.
+
+It takes the skip rather than running the real tailor, on purpose: the
+tailor is four model calls and up to five minutes, and the plumbing this
+suite exists to check is the same on either branch. The cost is that the
+"score moves within 500ms" assertion is gone from this tier; the score
+itself is covered by `src/lib/store/editor.test.ts`, which measures the
+recomputation directly and holds it under one frame.
 
 The one that matters most is "the editor shows the uploaded candidate, not
 the fixture". This screen used to fall back to the sample document whenever a
