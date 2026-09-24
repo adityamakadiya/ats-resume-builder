@@ -163,7 +163,16 @@ export function PreviewPane({ doc, templateId, zoom, onZoom }: PreviewPaneProps)
           >
             {/* A resume is printed on white paper and judged on white paper,
                 so the sheet is white whatever the chrome around it is. */}
-            <div ref={sheetRef} aria-hidden="true" className="bg-white text-black">
+            {/* `data-resume-sheet` is how the Download button finds the page
+                to print. A query rather than lifted state because there is
+                exactly one preview and the toolbar has no other reason to
+                know this component exists. */}
+            <div
+              ref={sheetRef}
+              data-resume-sheet=""
+              aria-hidden="true"
+              className="bg-white text-black"
+            >
               <Template doc={doc} density={asDensity(fit.density)} />
             </div>
           </div>

@@ -15,8 +15,9 @@
  */
 
 import { useState } from "react";
-import { templateList } from "@ats/templates";
+import { templateList, type ResumeDoc } from "@ats/templates";
 import { requestRender } from "@/lib/editor/api";
+import { PreviewMissingError, printFilename, serializePreview } from "@/lib/editor/print";
 import type { SaveState } from "@/lib/store/editor";
 
 export type ToolbarProps = {
@@ -31,7 +32,12 @@ export type ToolbarProps = {
   /** Opens the tailoring drawer. The one thing this screen is for. */
   onTailor: () => void;
   resumeId: string;
-  doc: unknown;
+  /*
+    Was `unknown`, because it was forwarded straight to the render API
+    without being looked at. The filename comes off the candidate's name
+    now, so the shape has to be real.
+  */
+  doc: ResumeDoc;
 };
 
 function saveLabel(state: SaveState): string {
@@ -73,7 +79,28 @@ export function Toolbar({
   async function download() {
     setDownloading(true);
     setProblem(null);
-    const result = await requestRender({ resumeId, templateId, doc });
+
+    /*
+      The page that gets printed is the preview itself, not a rebuild of it
+      from the document model. That is what the route has always wanted; the
+      model is what this used to send, which is why every download returned
+      400 and said "The renderer answered 400."
+    */
+    const filename = printFilename(doc.contact.name || title);
+    let html: string;
+    try {
+      html = serializePreview(title);
+    } catch (error) {
+      setDownloading(false);
+      setProblem(
+        error instanceof PreviewMissingError
+          ? "The preview has not finished rendering. Give it a moment and try again."
+          : "The preview could not be prepared for printing.",
+      );
+      return;
+    }
+
+    const result = await requestRender({ html, filename });
     setDownloading(false);
 
     if (!result.ok) {
@@ -82,7 +109,7 @@ export function Toolbar({
     }
     const link = document.createElement("a");
     link.href = result.url;
-    link.download = `${title.replace(/[^\w\s-]/g, "").trim() || "resume"}.pdf`;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(result.url);
   }

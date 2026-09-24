@@ -259,9 +259,9 @@ export type RenderResult =
  * because they are about to send the thing.
  */
 export async function requestRender(input: {
-  resumeId: string;
-  templateId: string;
-  doc: unknown;
+  /** A complete HTML document. See lib/editor/print.ts. */
+  html: string;
+  filename?: string;
 }): Promise<RenderResult> {
   let response: Response;
   try {
@@ -282,9 +282,33 @@ export async function requestRender(input: {
     };
   }
   if (!response.ok) {
-    return { ok: false, message: `The renderer answered ${response.status}.` };
+    /*
+      The body carries a sentence; the status alone does not. This route
+      returned 400 on every click for the life of the feature because the
+      caller sent the document model to something that wanted HTML, and
+      "The renderer answered 400." is what hid it.
+    */
+    const detail = await readRefusal(response);
+    return {
+      ok: false,
+      message: detail?.reason ?? `The renderer answered ${response.status}.`,
+      hint: detail?.remedy,
+    };
   }
 
   const blob = await response.blob();
   return { ok: true, url: URL.createObjectURL(blob) };
+}
+
+
+/** A refusal body, when the route sent one. Never throws. */
+async function readRefusal(
+  response: Response,
+): Promise<{ reason?: string; remedy?: string } | null> {
+  try {
+    const body = (await response.clone().json()) as { reason?: string; remedy?: string };
+    return body?.reason ? body : null;
+  } catch {
+    return null;
+  }
 }
