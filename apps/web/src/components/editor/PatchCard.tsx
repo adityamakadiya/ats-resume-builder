@@ -85,7 +85,7 @@ export function PatchCard({
   onDecline,
 }: PatchCardProps) {
   const delta = patch.delta;
-  const sign = delta > 0 ? "+" : "";
+  const sign = delta !== null && delta > 0 ? "+" : "";
 
   return (
     <article
@@ -94,19 +94,34 @@ export function PatchCard({
     >
       <header className="flex items-start justify-between gap-3 px-3 py-2.5">
         <p className="text-[0.8125rem] leading-snug text-ink">{patch.rationale}</p>
-        <span
-          aria-label={`Projected score change ${sign}${delta.toFixed(1)} points`}
-          className={`shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem] tabular-nums ${
-            delta > 0
-              ? "border-traced/40 bg-traced-soft text-traced"
-              : delta < 0
-                ? "border-caution/40 bg-caution-soft text-caution"
-                : "border-rule text-ink-faint"
-          }`}
-        >
-          {sign}
-          {delta.toFixed(1)} pts
-        </span>
+        {/*
+          No posting means no score, so a change cannot be worth points and
+          the badge says nothing rather than claiming zero. A "+0.0 pts" on
+          an Accept button reads as a measurement, and it would be an
+          invention in the most persuasive place on the screen.
+        */}
+        {delta === null ? (
+          <span
+            aria-label="No job description yet, so this change cannot be scored"
+            className="shrink-0 rounded-md border border-rule px-1.5 py-0.5 font-mono text-[0.6875rem] text-ink-faint"
+          >
+            not scored
+          </span>
+        ) : (
+          <span
+            aria-label={`Projected score change ${sign}${delta.toFixed(1)} points`}
+            className={`shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[0.6875rem] tabular-nums ${
+              delta > 0
+                ? "border-traced/40 bg-traced-soft text-traced"
+                : delta < 0
+                  ? "border-caution/40 bg-caution-soft text-caution"
+                  : "border-rule text-ink-faint"
+            }`}
+          >
+            {sign}
+            {delta.toFixed(1)} pts
+          </span>
+        )}
       </header>
 
       <ul className="border-t border-rule bg-paper-sunk/40">

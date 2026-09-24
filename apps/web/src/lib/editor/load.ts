@@ -256,7 +256,12 @@ export async function loadRun(resumeId: string, documentId?: string): Promise<Lo
   const doc = record(versionData)?.doc_json;
   if (!looksLikeDoc(doc)) return { run: shell, sourceFile };
 
-  let job: JobSpec = sample.job;
+  /*
+    Null, not the sample. A resume with no job attached has not been aimed
+    at anything, and pretending otherwise produced a confident score against
+    an invented posting.
+  */
+  let job: JobSpec | null = null;
   const jobId = typeof resume.job_id === "string" ? resume.job_id : null;
   if (jobId) {
     const { data: jobData } = await db.from("jobs").select("spec_json").eq("id", jobId).maybeSingle();
@@ -292,7 +297,7 @@ export async function loadRun(resumeId: string, documentId?: string): Promise<Lo
       doc,
       job,
       facts,
-      report: computeAtsReport(job, facts, tailoredOf(doc)),
+      report: job ? computeAtsReport(job, facts, tailoredOf(doc)) : null,
       truth,
       gaps,
     },

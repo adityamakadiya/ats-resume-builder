@@ -22,7 +22,7 @@ import type { AtsReport } from "@ats/core";
 import type { ResumeDoc } from "@ats/templates";
 
 export type SuggestionChipsProps = {
-  report: AtsReport;
+  report: AtsReport | null;
   doc: ResumeDoc;
   onAdd: (term: string, kind: "recoverable" | "missing") => void;
 };
@@ -62,6 +62,13 @@ function Chip({
 }
 
 export function SuggestionChips({ report, doc, onAdd }: SuggestionChipsProps) {
+  /*
+    These terms come from the posting. With no posting they came from a
+    fixture, which is how a frontend resume ended up being told to add gRPC,
+    Terraform and Apache Flink: real suggestions, for somebody else's job.
+  */
+  if (!report) return null;
+
   const present = new Set(
     doc.skills.flatMap((g) => g.items.map((i) => i.toLowerCase().trim())),
   );

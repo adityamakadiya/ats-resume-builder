@@ -50,7 +50,7 @@ type StepRecord = {
 type Phase = "editing" | "running" | "done";
 
 type Outcome = {
-  before: number;
+  before: number | null;
   after: number;
   violations: number;
   persisted: boolean;
@@ -245,7 +245,9 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const before = useEditorStore.getState().report.overall;
+    // Null before the first posting, which is the usual case for the very
+    // run that is about to create one. The delta is then "from nothing".
+    const before = useEditorStore.getState().report?.overall ?? null;
     let finished = false;
 
     try {
@@ -330,7 +332,15 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
 
   if (!open) return null;
 
-  const delta = outcome ? Math.round((outcome.after - outcome.before) * 10) / 10 : 0;
+  /*
+    Null when there was no score before this run, which is the usual case:
+    the run itself is what creates the posting. "Up from nothing" is not a
+    delta, so the panel reports the new score alone.
+  */
+  const delta =
+    outcome && outcome.before !== null
+      ? Math.round((outcome.after - outcome.before) * 10) / 10
+      : null;
 
   return (
     <div
@@ -527,19 +537,28 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
                   {outcome.after.toFixed(0)}
                 </span>
                 <span className="font-mono text-[0.625rem] text-ink-faint">/100</span>
-                <span
-                  className={[
-                    "ml-auto rounded-md border px-2 py-0.5 font-mono text-[0.75rem] tabular-nums",
-                    delta > 0
-                      ? "border-traced/40 bg-traced-soft text-traced"
-                      : delta < 0
-                        ? "border-caution/40 bg-caution-soft text-caution"
-                        : "border-rule text-ink-faint",
-                  ].join(" ")}
-                >
-                  {delta > 0 ? "+" : ""}
-                  {delta.toFixed(1)} from {outcome.before.toFixed(0)}
-                </span>
+                {/* With no previous score there is no movement to report,
+                    only a new number. Saying "+0.0 from 0" would invent a
+                    baseline that never existed. */}
+                {delta !== null && outcome.before !== null ? (
+                  <span
+                    className={[
+                      "ml-auto rounded-md border px-2 py-0.5 font-mono text-[0.75rem] tabular-nums",
+                      delta > 0
+                        ? "border-traced/40 bg-traced-soft text-traced"
+                        : delta < 0
+                          ? "border-caution/40 bg-caution-soft text-caution"
+                          : "border-rule text-ink-faint",
+                    ].join(" ")}
+                  >
+                    {delta > 0 ? "+" : ""}
+                    {delta.toFixed(1)} from {outcome.before.toFixed(0)}
+                  </span>
+                ) : (
+                  <span className="ml-auto rounded-md border border-rule px-2 py-0.5 font-mono text-[0.75rem] text-ink-faint">
+                    first score
+                  </span>
+                )}
               </div>
 
               {outcome.violations > 0 && (

@@ -383,9 +383,20 @@ export type EditorRun = {
   /** False means nothing on this screen is being written anywhere. Say so. */
   saved: boolean;
   doc: ResumeDoc;
-  job: JobSpec;
+  /**
+   * The posting this resume is aimed at, or null when there is not one yet.
+   *
+   * Null is the normal state immediately after an upload, and it has to be
+   * representable. It used to fall back to the sample posting, which meant a
+   * frontend engineer opening the editor was scored against an invented
+   * backend payments role and told to add gRPC and Terraform. The number
+   * looked measured and was measured against fiction, which is the exact
+   * failure this product exists to refuse.
+   */
+  job: JobSpec | null;
   facts: ResumeFacts;
-  report: AtsReport;
+  /** Null until there is a posting to score against. */
+  report: AtsReport | null;
   truth: TruthReport;
   gaps: GapAnalysis;
 };

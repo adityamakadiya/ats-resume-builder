@@ -42,9 +42,22 @@ export function ScoreCard({
   report,
   breakdown,
 }: {
-  report: AtsReport;
-  breakdown: ScoreBreakdownV2;
+  report: AtsReport | null;
+  breakdown: ScoreBreakdownV2 | null;
 }) {
+  /*
+    No posting, no score, and no number on the screen.
+
+    Every dimension the scorer computes is a comparison against a job
+    description, so without one there is nothing to report. This used to
+    fall back to a sample posting and print a figure anyway, which meant a
+    frontend engineer was shown a confident 56 measured against an invented
+    backend payments role. A number that looks measured and is not is worse
+    than no number, and it is precisely the thing this product criticises
+    other tools for.
+  */
+  if (!report || !breakdown) return <NoPosting />;
+
   const overall = report.overall;
   const [delta, setDelta] = useState<number | null>(null);
   const previous = useRef(overall);
@@ -135,6 +148,27 @@ export function ScoreCard({
           </span>
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * What the score panel says before there is anything to score against.
+ *
+ * An invitation rather than a placeholder: it names the one action that
+ * turns this panel on, and says what the number will mean when it arrives.
+ */
+function NoPosting() {
+  return (
+    <section aria-label="Score">
+      <p className="label">ATS score</p>
+      <p className="mt-2 text-[1.75rem] leading-none font-semibold text-ink-faint">
+        Not yet
+      </p>
+      <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-muted">
+        A score is a comparison, so it needs the posting you are aiming at.
+        Add one and this fills in, then moves as you type.
+      </p>
     </section>
   );
 }

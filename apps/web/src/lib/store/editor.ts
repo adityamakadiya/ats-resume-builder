@@ -65,9 +65,11 @@ export type PendingPatch = {
   rationale: string;
   origin: PatchOrigin;
   /** The score this patch would produce, computed when it was staged. */
-  projected: number;
+  /** Score this patch would produce. Null with no posting to score against. */
+  projected: number | null;
   /** `projected` minus the score at the time of staging. */
-  delta: number;
+  /** Points it would move the score by, or null when there is no score. */
+  delta: number | null;
 };
 
 /** One reversible step. The ops travel with their own inverse. */
@@ -100,15 +102,17 @@ export type EditorState = {
   saved: boolean;
 
   /* the inputs the score is a function of */
-  job: JobSpec;
+  job: JobSpec | null;
   facts: ResumeFacts;
 
   /* the document and everything derived from it */
   doc: ResumeDoc;
-  report: AtsReport;
-  breakdown: ScoreBreakdownV2;
+  report: AtsReport | null;
+  breakdown: ScoreBreakdownV2 | null;
   /** The score before the last mutation, so the delta pill has something to say. */
-  previousOverall: number;
+  /** The score before the last change, so a delta can be shown. Null when
+   *  there was no score to move from. */
+  previousOverall: number | null;
   truth: TruthReport;
   gaps: GapAnalysis;
 
@@ -152,7 +156,7 @@ export type TailoredRun = {
   gaps: GapAnalysis;
   /** The route's own report. The local recomputation is what is displayed. */
   report?: AtsReport;
-  job?: JobSpec;
+  job?: JobSpec | null;
   persisted: boolean;
 };
 
@@ -186,7 +190,8 @@ export type EditorActions = {
    * is a new document, not an edit to the old one, and an undo that half
    * reverted it would leave a document neither the model nor the user wrote.
    */
-  loadTailored: (run: TailoredRun) => { before: number; after: number };
+  /** `before` is null when this run produced the first score. */
+  loadTailored: (run: TailoredRun) => { before: number | null; after: number };
 
   openUnverifiable: () => void;
   closeUnverifiable: () => void;
@@ -212,11 +217,28 @@ function nextId(prefix: string): string {
 }
 
 /** The score of a document. Pure, synchronous, and the reason there is no spinner. */
-export function scoreOf(job: JobSpec, facts: ResumeFacts, doc: ResumeDoc): AtsReport {
+/**
+ * The score, or nothing.
+ *
+ * There is no such thing as an ATS score without a posting to score against:
+ * every dimension the scorer computes is a comparison. Returning null is the
+ * honest answer, and the UI renders an invitation rather than a figure.
+ */
+export function scoreOf(
+  job: JobSpec | null,
+  facts: ResumeFacts,
+  doc: ResumeDoc
+): AtsReport | null {
+  if (!job) return null;
   return computeAtsReport(job, facts, tailoredOf(doc));
 }
 
-function breakdownOf(job: JobSpec, facts: ResumeFacts, doc: ResumeDoc): ScoreBreakdownV2 {
+function breakdownOf(
+  job: JobSpec | null,
+  facts: ResumeFacts,
+  doc: ResumeDoc
+): ScoreBreakdownV2 | null {
+  if (!job) return null;
   return computeBreakdown(job, facts, tailoredOf(doc));
 }
 
@@ -249,7 +271,7 @@ function mutate(
   state.doc = next;
   for (const key of keys) state.editedKeys.add(key);
 
-  state.previousOverall = state.report.overall;
+  state.previousOverall = state.report?.overall ?? null;
   state.report = scoreOf(state.job, state.facts, next);
   state.breakdown = breakdownOf(state.job, state.facts, next);
   state.lastError = null;
@@ -258,7 +280,7 @@ function mutate(
 }
 
 function rescore(state: EditorState) {
-  state.previousOverall = state.report.overall;
+  state.previousOverall = state.report?.overall ?? null;
   state.report = scoreOf(state.job, state.facts, state.doc);
   state.breakdown = breakdownOf(state.job, state.facts, state.doc);
 }
@@ -316,13 +338,13 @@ export const useEditorStore = create<EditorStore>()(
     templateId: "standard",
     saved: false,
 
-    job: EMPTY_JOB,
+    job: null,
     facts: EMPTY_FACTS,
 
     doc: EMPTY_DOC,
-    report: scoreOf(EMPTY_JOB, EMPTY_FACTS, EMPTY_DOC),
+    report: null,
     breakdown: breakdownOf(EMPTY_JOB, EMPTY_FACTS, EMPTY_DOC),
-    previousOverall: 0,
+    previousOverall: null,
     truth: { passed: true, error_count: 0, warning_count: 0, violations: [] },
     gaps: {
       strong_matches: [],
@@ -370,7 +392,7 @@ export const useEditorStore = create<EditorStore>()(
         state.gaps = run.gaps;
         state.report = run.report;
         state.breakdown = breakdownOf(run.job, run.facts, run.doc);
-        state.previousOverall = run.report.overall;
+        state.previousOverall = run.report?.overall ?? null;
         state.pendingPatches = [];
         state.editedKeys = new Set<string>();
         state.history = { past: [], future: [] };
@@ -434,9 +456,14 @@ export const useEditorStore = create<EditorStore>()(
         return null;
       }
 
-      // Projected, not promised: scored against the document as it stands now.
+      /*
+        Projected, not promised: scored against the document as it stands
+        now. Null with no posting, because a change cannot be worth points
+        when there is nothing awarding them, and a made up delta on an
+        Accept button is a lie in the most persuasive possible place.
+      */
       const projectedDoc = applyDocPatch(state.doc, ops);
-      const projected = scoreOf(state.job, state.facts, projectedDoc).overall;
+      const projected = scoreOf(state.job, state.facts, projectedDoc)?.overall ?? null;
       const patchId = id ?? nextId("patch");
 
       set((draft) => {
@@ -446,7 +473,10 @@ export const useEditorStore = create<EditorStore>()(
           rationale,
           origin,
           projected,
-          delta: Math.round((projected - draft.report.overall) * 10) / 10,
+          delta:
+            projected !== null && draft.report
+              ? Math.round((projected - draft.report.overall) * 10) / 10
+              : null,
         });
       });
       return patchId;
@@ -521,7 +551,8 @@ export const useEditorStore = create<EditorStore>()(
     /* -------------------------------------------------------- tailoring -- */
 
     loadTailored: (run) => {
-      const before = get().report.overall;
+      // Null on the first run: this is what creates the posting.
+      const before = get().report?.overall ?? null;
 
       set((state) => {
         const doc = { ...run.tailored, contact: state.doc.contact } as ResumeDoc;
@@ -558,7 +589,7 @@ export const useEditorStore = create<EditorStore>()(
         state.saveState = run.persisted ? { kind: "saved", at: Date.now() } : { kind: "sample" };
       });
 
-      return { before, after: get().report.overall };
+      return { before, after: get().report?.overall ?? 0 };
     },
 
     /* ---------------------------------------------------- the refusal -- */

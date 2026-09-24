@@ -232,7 +232,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
               </Fold>
             )}
 
-            {report.recommendations.length > 0 && (
+            {report && report.recommendations.length > 0 && (
               <Fold title="What to do next" count={report.recommendations.length}>
                 <ol className="list-decimal space-y-1 pl-4">
                   {report.recommendations.map((rec, i) => (
