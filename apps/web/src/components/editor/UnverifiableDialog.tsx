@@ -35,7 +35,6 @@ export type UnverifiableDialogProps = {
   facts: ResumeFacts;
   onClose: () => void;
   /** Opens the chat with a question already written. */
-  onAsk: (question: string, violation: TruthViolation) => void;
   onDrop: (index: number) => void;
 };
 
@@ -90,7 +89,6 @@ export function UnverifiableDialog({
   doc,
   facts,
   onClose,
-  onAsk,
   onDrop,
 }: UnverifiableDialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -222,14 +220,13 @@ export function UnverifiableDialog({
                     </p>
                   )}
 
+                  {/*
+                    There was a third button here that handed the repair to
+                    the chat panel. The chat panel is gone from this screen,
+                    so the button had nowhere to send anyone. A control that
+                    does nothing is worse than one absent control.
+                  */}
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onAsk(repairQuestion(violation, source), violation)}
-                      className="rounded-md bg-stamp px-3.5 py-1.5 text-[0.8125rem] font-medium text-paper-raised transition-colors hover:bg-[color:var(--stamp-strong)]"
-                    >
-                      {askLabel(violation.code)}
-                    </button>
                     <button
                       type="button"
                       onClick={() => onDrop(index)}

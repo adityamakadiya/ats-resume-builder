@@ -29,7 +29,6 @@ import {
   useEditorStore,
   type SaveState,
 } from "@/lib/store/editor";
-import { ChatPanel } from "./ChatPanel";
 import { FormPanel } from "./FormPanel";
 import { PreviewPane } from "./PreviewPane";
 import { ScoreCard } from "./ScoreCard";
@@ -131,7 +130,6 @@ function NoPosting({ onAdd }: { onAdd: () => void }) {
 }
 
 export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: string | null }) {
-  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const init = useEditorStore((s) => s.init);
@@ -205,11 +203,6 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const ask = useCallback((question: string) => {
-    useEditorStore.getState().closeUnverifiable();
-    setPrefill({ text: question, nonce: Date.now() });
-  }, []);
-
   const lines = countLines(doc);
   const store = useEditorStore.getState();
 
@@ -252,7 +245,13 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         </p>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[22rem_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)_minmax(24rem,1fr)]">
+      {/*
+        Two columns: the document and the page it becomes. The chat used to
+        sit between them, which cost the preview its space at every width
+        under xl - the thing the candidate is actually judged on was the one
+        panel that got hidden first.
+      */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[22rem_minmax(0,1fr)] lg:overflow-hidden">
         {/* left */}
         <Panel className="lg:overflow-y-auto">
           <aside aria-label="Score and document" className="px-4 py-4">
@@ -348,13 +347,8 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
           </aside>
         </Panel>
 
-        {/* centre */}
-        <Panel className="min-h-[26rem] lg:overflow-hidden">
-          <ChatPanel prefill={prefill} />
-        </Panel>
-
         {/* right */}
-        <Panel className="hidden xl:flex xl:overflow-hidden">
+        <Panel className="min-h-[26rem] lg:overflow-hidden">
           <PreviewPane doc={doc} templateId={templateId} zoom={zoom} onZoom={store.setZoom} />
         </Panel>
       </div>
@@ -397,7 +391,6 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         doc={doc}
         facts={facts}
         onClose={store.closeUnverifiable}
-        onAsk={ask}
         onDrop={store.dropViolation}
       />
     </div>

@@ -22,7 +22,6 @@ afterEach(cleanup);
 
 function setup(overrides: Partial<Parameters<typeof UnverifiableDialog>[0]> = {}) {
   const onClose = vi.fn();
-  const onAsk = vi.fn();
   const onDrop = vi.fn();
 
   render(
@@ -32,17 +31,16 @@ function setup(overrides: Partial<Parameters<typeof UnverifiableDialog>[0]> = {}
       doc={SAMPLE_DOC}
       facts={SAMPLE_FACTS}
       onClose={onClose}
-      onAsk={onAsk}
       onDrop={onDrop}
       {...overrides}
     />,
   );
 
-  return { onClose, onAsk, onDrop };
+  return { onClose, onDrop };
 }
 
 describe("UnverifiableDialog", () => {
-  it("shows the refused claim, the source fact and both actions", () => {
+  it("shows the refused claim, the source fact and the action left on it", () => {
     setup();
 
     const dialog = screen.getByRole("dialog");
@@ -60,7 +58,6 @@ describe("UnverifiableDialog", () => {
     expect(screen.getByText(/We will not invent a figure, or round one up/i)).toBeTruthy();
 
     // Both ways forward.
-    expect(screen.getByRole("button", { name: "Tell me the real number" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Drop it" })).toBeTruthy();
   });
 
@@ -73,13 +70,18 @@ describe("UnverifiableDialog", () => {
     expect(text).not.toMatch(/something went wrong|try again later/i);
   });
 
-  it("hands a pre-written question to the chat, and drops by index", async () => {
+  it("drops by index, and offers no route to a panel that is gone", async () => {
     const user = userEvent.setup();
-    const { onAsk, onDrop } = setup();
+    const { onDrop } = setup();
 
-    await user.click(screen.getByRole("button", { name: "Tell me the real number" }));
-    expect(onAsk).toHaveBeenCalledTimes(1);
-    expect(onAsk.mock.calls[0]?.[0]).toMatch(/What is the real figure/i);
+    /*
+      "Tell me the real number" used to hand a pre-written question to the
+      chat panel. The chat is no longer on this screen, so the button was
+      removed rather than left pointing nowhere. Asserted, because a dead
+      control here would be offered at exactly the moment somebody is
+      trying to fix a refusal.
+    */
+    expect(screen.queryByRole("button", { name: /tell me the real number/i })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Drop it" }));
     expect(onDrop).toHaveBeenCalledWith(0);
@@ -101,7 +103,6 @@ describe("UnverifiableDialog", () => {
         doc={SAMPLE_DOC}
         facts={SAMPLE_FACTS}
         onClose={() => {}}
-        onAsk={() => {}}
         onDrop={() => {}}
       />,
     );
