@@ -207,3 +207,39 @@ describe("structured", () => {
     await expect(call()).rejects.toMatchObject({ kind: "no_key" });
   });
 });
+
+/* ------------------------------------------------------- reasoning gate  */
+
+describe("the reasoning parameter", () => {
+  it("is omitted for a model that rejects it", async () => {
+    // gpt-4o-mini answers a 400 to reasoning.effort rather than ignoring it,
+    // so an unconditional parameter broke every call on the small model.
+    process.env.LLM_MODEL_SMALL = "gpt-4o-mini";
+    create.mockResolvedValueOnce(ok({ name: "A", years: 1 }));
+
+    await structured({
+      system: "s",
+      user: "u",
+      schema: Person,
+      schemaName: "Person",
+      step: "extract",
+    });
+
+    expect(create.mock.calls[0][0].reasoning).toBeUndefined();
+  });
+
+  it("is sent for a model that accepts it", async () => {
+    process.env.LLM_MODEL_LARGE = "gpt-5.3-codex";
+    create.mockResolvedValueOnce(ok({ name: "A", years: 1 }));
+
+    await structured({
+      system: "s",
+      user: "u",
+      schema: Person,
+      schemaName: "Person",
+      step: "tailor",
+    });
+
+    expect(create.mock.calls[0][0].reasoning).toEqual({ effort: expect.any(String) });
+  });
+});

@@ -34,7 +34,7 @@ import { toJsonSchema } from "@ats/core";
 import OpenAI from "openai";
 import { z } from "zod";
 
-import { configFor, costOf, type Step } from "./profiles";
+import { configFor, costOf, supportsReasoning, type Step } from "./profiles";
 
 export class LLMError extends Error {
   constructor(
@@ -125,7 +125,11 @@ export async function structured<T extends z.ZodTypeAny>(
       const response = await getClient().responses.create(
         {
           model: config.model,
-          reasoning: { effort: config.effort },
+          // Only where the model accepts it. Sending it to one that does not
+          // is a 400, not an ignored field, so this cannot be unconditional.
+          ...(supportsReasoning(config.model)
+            ? { reasoning: { effort: config.effort } }
+            : {}),
           max_output_tokens: config.maxOutputTokens,
           // System first, user last. See the note at the top of this file: the
           // cache keys on the prefix and this ordering is the whole reason it

@@ -42,8 +42,26 @@ export type ProfileName = "fast" | "balanced" | "thorough";
  * one thing guaranteed about a model id is that it changes, and a redeploy to
  * move a string is a redeploy nobody schedules.
  */
-const SMALL = process.env.LLM_MODEL_SMALL ?? "gpt-5-mini";
-const LARGE = process.env.LLM_MODEL_LARGE ?? "gpt-5";
+const SMALL = process.env.LLM_MODEL_SMALL ?? "gpt-4o-mini";
+const LARGE = process.env.LLM_MODEL_LARGE ?? "gpt-5.3-codex";
+
+/**
+ * Whether a model accepts `reasoning.effort`.
+ *
+ * Not every model does, and asking one that does not is a hard 400 rather
+ * than a politely ignored field: "Unsupported parameter: 'reasoning.effort'
+ * is not supported with this model." The defaults above are split exactly
+ * along this line, so sending the parameter unconditionally broke every
+ * call on the small model.
+ *
+ * A prefix list rather than a lookup table, because the set is open and a
+ * table would silently mis-answer for a model nobody has added to it yet.
+ * The conservative direction is to omit the parameter: a model that could
+ * have reasoned and was not asked to still answers.
+ */
+export function supportsReasoning(model: string): boolean {
+  return /^(gpt-5|o1|o3|o4)/.test(model);
+}
 
 export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
   fast: {
