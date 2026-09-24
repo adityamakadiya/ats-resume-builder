@@ -14,5 +14,11 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "fixtures:check": "cd backend && .venv/bin/python scripts/export_score_fixtures.py --check && cd ../packages/templates && npx tsx scripts/emit-html.mjs --check",
     "dev:web": "node scripts/dev.mjs --web"
+  },
+  "_comment_overrides": "One React for the whole workspace. apps/web pins 19.2.8 exactly and packages/templates asks for ^19, so npm hoisted a second, newer copy to the root. Two Reacts means useContext returns null the moment a component from one crosses into a tree rendered by the other, which is what the template previews do on every screen. It failed only in tests first, which was luck.",
+  "_comment_react": "One React for the whole workspace, enforced two ways because one was not enough. apps/web arrived from create-next-app with its own package-lock.json and exact react pins; a workspace must have exactly one lockfile at the root, and that stray one kept reinstalling a second copy no matter what the ranges said. Two Reacts means useContext returns null the moment a component from one renders inside a tree owned by the other, which is precisely what the template previews do on every screen. It surfaced in tests rather than in the browser, which was luck.",
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
