@@ -1,7 +1,13 @@
 /**
  * Tests for the print proxy.
  *
- * Two things matter here. The render headers have to survive the hop, because
+ * The download is the one gated action in the product, so every test below
+ * signs in first (see `signedIn`) and the gate itself is tested separately
+ * at the bottom. Mocking the session rather than the whole Supabase client
+ * because `currentUser` is the contract this route depends on; what it does
+ * with cookies underneath is not this file's business.
+ *
+ * Two other things matter here. The render headers have to survive the hop, because
  * "this came out at three pages" is the warning the editor shows and a
  * dropped header is a silent three-page resume. And the size cap has to fire
  * on this side of the boundary, where the error can be written by someone who
@@ -14,10 +20,27 @@ import { resetRateLimits } from "@/lib/sse";
 import { unmigratedSupabase } from "@/lib/sse/test-support";
 
 const supabaseState = vi.hoisted(() => ({ client: null as unknown }));
+const authState = vi.hoisted(() => ({
+  user: null as { id: string; email: string | null } | null,
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: async () => supabaseState.client,
 }));
+
+vi.mock("@/lib/auth/session", () => ({
+  currentUser: async () => authState.user,
+  authAvailable: async () => true,
+}));
+
+/** Nobody downloads signed out, so the default for these tests is signed in. */
+function signedIn() {
+  authState.user = { id: "u1", email: "aditya@example.com" };
+}
+
+function signedOut() {
+  authState.user = null;
+}
 
 const { POST } = await import("./route");
 
@@ -32,6 +55,7 @@ function post(body: unknown, signal?: AbortSignal) {
 
 beforeEach(() => {
   resetRateLimits();
+  signedIn();
   supabaseState.client = unmigratedSupabase();
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -138,5 +162,48 @@ describe("POST /api/render", () => {
     expect(response.status).toBe(503);
     expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_URL");
     expect(payload.remedy).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  });
+});
+
+
+describe("the download gate", () => {
+  /*
+    The gate is on the server, not in the dialog. This route turns HTML into
+    a PDF, which makes it worth calling directly, and a check the browser
+    does would hand a signed-out caller exactly the thing the dialog is
+    asking them to sign in for.
+  */
+  it("refuses a signed-out caller with a 401 and a reason", async () => {
+    signedOut();
+
+    const response = await POST(post({ html: "<!doctype html><html></html>" }));
+    expect(response.status).toBe(401);
+
+    const body = (await response.json()) as { reason: string; remedy: string };
+    expect(body.reason).toMatch(/sign in/i);
+    // The fear at this point is losing the work, so the answer says so.
+    expect(body.remedy).toMatch(/saved/i);
+  });
+
+  it("refuses before the document service is touched at all", async () => {
+    signedOut();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await POST(post({ html: "<!doctype html><html></html>" }));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("lets a signed-in caller through", async () => {
+    signedIn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      }),
+    );
+
+    const response = await POST(post({ html: "<!doctype html><html></html>" }));
+    expect(response.status).toBe(200);
   });
 });

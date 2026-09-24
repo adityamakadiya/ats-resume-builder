@@ -249,7 +249,9 @@ export async function fetchScore(resumeId: string): Promise<AtsReport | null> {
 
 export type RenderResult =
   | { ok: true; url: string }
-  | { ok: false; message: string; hint?: string };
+  /** The download is gated. The caller opens the sign-in dialog. */
+  | { ok: false; needsSignIn: true; message: string; hint?: string }
+  | { ok: false; needsSignIn?: false; message: string; hint?: string };
 
 /**
  * Asks for a PDF.
@@ -279,6 +281,15 @@ export async function requestRender(input: {
       ok: false,
       message: "The PDF renderer is not running yet.",
       hint: "Use your browser's print dialog on the preview in the meantime.",
+    };
+  }
+  if (response.status === 401) {
+    const detail = await readRefusal(response);
+    return {
+      ok: false,
+      needsSignIn: true,
+      message: detail?.reason ?? "Sign in to download your resume.",
+      hint: detail?.remedy,
     };
   }
   if (!response.ok) {

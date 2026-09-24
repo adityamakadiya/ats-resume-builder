@@ -24,6 +24,7 @@
 import { z } from "zod";
 
 import { docServiceHeaders, docServiceUrl, gate, readJsonBody, refuse } from "@/lib/sse";
+import { currentUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,27 @@ const BodySchema = z.object({
 export async function POST(request: Request) {
   const entry = await gate("render");
   if (!entry.ok) return entry.response;
+
+  /*
+    The one gate in the product, and it is here rather than in the browser.
+    A check the client does is a suggestion: this route takes HTML and gives
+    back a PDF, so it is worth calling directly, and a signed-out caller who
+    skips the dialog would otherwise get exactly what the dialog is asking
+    them to sign in for.
+
+    Everything before this point stays open. Upload, tailor, edit and preview
+    all work with no account, because asking for one before the user has seen
+    whether the output is any good is how you lose them. 401 is the signal the
+    toolbar turns into the sign-in dialog.
+  */
+  const user = await currentUser();
+  if (!user) {
+    return refuse(
+      "Sign in to download your resume.",
+      "Your resume is saved and stays exactly as it is. This is the only step that needs an account.",
+      401,
+    );
+  }
 
   // Slightly above the HTML cap: the JSON envelope and the filename are also
   // bytes, and rejecting at exactly the HTML limit would refuse a document

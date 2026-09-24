@@ -18,6 +18,7 @@ import { useState } from "react";
 import { templateList, type ResumeDoc } from "@ats/templates";
 import { requestRender } from "@/lib/editor/api";
 import { PreviewMissingError, printFilename, serializePreview } from "@/lib/editor/print";
+import { SignInDialog } from "./SignInDialog";
 import type { SaveState } from "@/lib/store/editor";
 
 export type ToolbarProps = {
@@ -75,6 +76,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const [downloading, setDownloading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   async function download() {
     setDownloading(true);
@@ -104,6 +106,15 @@ export function Toolbar({
     setDownloading(false);
 
     if (!result.ok) {
+      /*
+        Not an error. The download is the one thing that needs an account,
+        so a 401 here is the product working: open the dialog, and the
+        download resumes by itself once there is a session.
+      */
+      if (result.needsSignIn) {
+        setSignInOpen(true);
+        return;
+      }
       setProblem(result.hint ? `${result.message} ${result.hint}` : result.message);
       return;
     }
@@ -190,6 +201,20 @@ export function Toolbar({
           {problem}
         </p>
       )}
+
+      {/*
+        Signing in resumes the download rather than making the user find the
+        button again. They pressed it already; the account was the only thing
+        in the way.
+      */}
+      <SignInDialog
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        onSignedIn={() => {
+          setSignInOpen(false);
+          void download();
+        }}
+      />
     </div>
   );
 }
