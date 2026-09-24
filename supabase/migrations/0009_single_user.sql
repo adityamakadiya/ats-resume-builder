@@ -123,6 +123,22 @@ alter table resumes
 -- Detach from auth.users, default the owner, open the tables
 -- --------------------------------------------------------------------------
 
+/*
+  The backfill has to get past the triggers 0005 installed, and they are
+  doing their job when they stop it.
+
+  facts is append-only: only valid_to may ever change, because a fact is a
+  claim somebody made and rewriting one silently changes what a resume was
+  allowed to say. patches freeze once decided, for the same reason. Neither
+  guard knows about a migration rewriting ownership, and neither should.
+
+  So they are switched off for the duration of the backfill and switched
+  back on immediately. Disabled rather than dropped: a dropped trigger is
+  one somebody forgets to recreate, and these two are load bearing.
+*/
+alter table facts disable trigger facts_append_only;
+alter table patches disable trigger patches_decision;
+
 do $$
 declare
     t text;
@@ -187,6 +203,9 @@ begin
         execute format('grant select, insert, update, delete on public.%I to anon', t);
     end loop;
 end $$;
+
+alter table facts enable trigger facts_append_only;
+alter table patches enable trigger patches_decision;
 
 -- step_cache was service-role only and never user-scoped. It needs the same
 -- grant now that there is no service role in the request path.
