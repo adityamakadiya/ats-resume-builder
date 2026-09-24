@@ -36,6 +36,9 @@ export type ToolbarProps = {
 
 function saveLabel(state: SaveState): string {
   switch (state.kind) {
+    // Nothing is known yet; claiming either way would be a guess.
+    case "loading":
+      return "";
     case "sample":
       return "Not saved";
     case "clean":

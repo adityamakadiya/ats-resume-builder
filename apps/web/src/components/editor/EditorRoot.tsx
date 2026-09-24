@@ -27,6 +27,7 @@ import {
   selectCanUndo,
   openViolations,
   useEditorStore,
+  type SaveState,
 } from "@/lib/store/editor";
 import { ChatPanel } from "./ChatPanel";
 import { FormPanel } from "./FormPanel";
@@ -145,7 +146,24 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const editedKeys = useEditorStore((s) => s.editedKeys);
   const templateId = useEditorStore((s) => s.templateId);
   const zoom = useEditorStore((s) => s.zoom);
-  const saveState = useEditorStore((s) => s.saveState);
+  const storeSave = useEditorStore((s) => s.saveState);
+
+  /*
+    `init` runs in an effect below, so the server render and the first client
+    paint both happen before the store knows anything. The store reports
+    "loading" for that window rather than guessing, and the guess it used to
+    make was "sample": every resume was announced as an unsaved sample on a
+    database with no schema, which on a saved resume was false twice over.
+
+    Resolving it here rather than in the store, because the answer is sitting
+    in the props. `run.saved` is what `init` is about to set this from, so
+    using it now makes the first paint agree with the second. Reading it from
+    the store alone would be correct and still wrong to look at: the banner
+    would appear a frame late and push the document down, which is a visible
+    jump on every load and moved the buttons under the reader's cursor.
+  */
+  const saveState: SaveState =
+    storeSave.kind === "loading" ? (run.saved ? { kind: "clean" } : { kind: "sample" }) : storeSave;
   const lastError = useEditorStore((s) => s.lastError);
   const unverifiableOpen = useEditorStore((s) => s.unverifiableOpen);
   const tailorOpen = useEditorStore((s) => s.tailorOpen);

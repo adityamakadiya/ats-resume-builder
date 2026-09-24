@@ -49,6 +49,16 @@ enableMapSet();
 /* ---------------------------------------------------------------- types -- */
 
 export type SaveState =
+  /*
+    Before `init` runs. EditorRoot loads the run in an effect, so the server
+    render and the first client paint both happen on the store's initial
+    state, and whatever that state claims is asserted about every resume for
+    one frame. It used to start as "sample", which put "Sample document, not
+    saved — the database schema is not applied yet" above a document that was
+    saved, on a schema that was applied. Nothing is known at this point, so
+    this says nothing.
+  */
+  | { kind: "loading" }
   | { kind: "sample" }
   | { kind: "clean" }
   | { kind: "dirty" }
@@ -362,7 +372,7 @@ export const useEditorStore = create<EditorStore>()(
     pendingPatches: [],
     editedKeys: new Set<string>(),
     history: { past: [], future: [] },
-    saveState: { kind: "sample" },
+    saveState: { kind: "loading" },
     lastError: null,
 
     unverifiableOpen: false,

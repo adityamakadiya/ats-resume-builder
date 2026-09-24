@@ -385,3 +385,32 @@ describe("a resume with no posting", () => {
     expect(second.before).toBeCloseTo(first.after, 5);
   });
 });
+
+/*
+  EditorRoot calls `init` from an effect, so the server render and the first
+  client paint both run on whatever the store starts as. That made the
+  initial value a claim about every resume ever opened, for one frame.
+*/
+describe("the state before the run has loaded", () => {
+  it("does not announce a sample document before it knows there is one", () => {
+    // The pristine value, not the post-init one every other test sees.
+    const initial = useEditorStore.getInitialState();
+
+    // "sample" renders "Sample document, not saved. The database schema is
+    // not applied yet, so there is no version to load." Both halves were
+    // false on a saved resume with the migrations applied, which is the
+    // ordinary case, and it flashed on every single load.
+    expect(initial.saveState.kind).toBe("loading");
+    expect(initial.saveState.kind).not.toBe("sample");
+  });
+
+  it("still says sample once a run arrives that really is one", () => {
+    state().init({ ...sampleRun("test"), saved: false });
+    expect(state().saveState.kind).toBe("sample");
+  });
+
+  it("says clean for a run that was stored", () => {
+    state().init({ ...sampleRun("test"), saved: true });
+    expect(state().saveState.kind).toBe("clean");
+  });
+});

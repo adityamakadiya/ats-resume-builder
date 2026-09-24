@@ -219,6 +219,7 @@ export async function POST(request: Request) {
         job: job.value,
         gaps: gaps.value,
         tailored: outcome.tailored,
+        contact: facts.value.contact,
         truth: outcome.truth,
         report: outcome.report,
       });
@@ -241,7 +242,23 @@ export async function POST(request: Request) {
 }
 
 /**
- * The raw text behind an uploaded document.
+ * The raw text behind a resume, given either kind of id.
+ *
+ * Both callers send a RESUME id in a field called `resumeId`, and this used
+ * to read the `documents` table alone. Nothing in the product ever put a
+ * document id there, so every tailoring run failed the same way:
+ *
+ *     data: {"t":"error","message":"That resume could not be found."}
+ *
+ * on step one, for both entry points, with "Upload the file again" as the
+ * hint for something no upload could fix. The name said resume, the lookup
+ * said document, and the two were never reconciled because the error reads
+ * like an empty database rather than a mismatch.
+ *
+ * So it now resolves either: a document id directly, or a resume id through
+ * `source_document_id`. The resume hop is second because it costs a round
+ * trip and the direct hit is the cheaper of the two, not because either is
+ * more correct.
  *
  * Best-effort by necessity: the table may not exist yet. A miss is not an
  * exception, it is "we could not find your resume", which the caller turns
@@ -256,7 +273,7 @@ async function loadResumeText(supabase: ServerClient, id: string): Promise<strin
           value: string,
         ) => {
           maybeSingle: () => Promise<{
-            data: { raw_text?: string | null } | null;
+            data: { raw_text?: string | null; source_document_id?: string | null } | null;
             error: unknown;
           }>;
         };
@@ -264,13 +281,30 @@ async function loadResumeText(supabase: ServerClient, id: string): Promise<strin
     };
   };
 
+  const db = supabase as unknown as Loose;
+
   try {
-    const { data } = await (supabase as unknown as Loose)
-      .from("documents")
-      .select("raw_text")
+    const direct = await db.from("documents").select("raw_text").eq("id", id).maybeSingle();
+    const text = (direct.data?.raw_text ?? "").trim();
+    if (text) return text;
+
+    /*
+      Not a document, so try it as a resume. A resume with no upload behind
+      it is a legitimate state (one started from scratch), and it returns
+      empty here exactly as a genuine miss does: in both cases there is no
+      text to tailor and the caller's message is the right one.
+    */
+    const resume = await db
+      .from("resumes")
+      .select("source_document_id")
       .eq("id", id)
       .maybeSingle();
-    return (data?.raw_text ?? "").trim();
+
+    const sourceId = resume.data?.source_document_id;
+    if (typeof sourceId !== "string" || !sourceId) return "";
+
+    const via = await db.from("documents").select("raw_text").eq("id", sourceId).maybeSingle();
+    return (via.data?.raw_text ?? "").trim();
   } catch (error) {
     console.warn("[tailor] could not read the stored resume:", error);
     return "";

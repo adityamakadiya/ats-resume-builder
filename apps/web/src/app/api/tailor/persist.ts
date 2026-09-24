@@ -23,7 +23,14 @@
  * client. That is a real loss of checking and it is confined to this file.
  */
 
-import type { AtsReport, GapAnalysis, JobSpec, TailoredResume, TruthReport } from "@ats/core";
+import type {
+  AtsReport,
+  GapAnalysis,
+  JobSpec,
+  ResumeFacts,
+  TailoredResume,
+  TruthReport,
+} from "@ats/core";
 import type { ServerClient } from "@/lib/supabase/server";
 
 export type PersistInput = {
@@ -36,6 +43,20 @@ export type PersistInput = {
   job: JobSpec;
   gaps: GapAnalysis;
   tailored: TailoredResume;
+  /*
+    The contact block, which `tailored` does not have and must not have: a
+    model rewrites bullets, never a phone number. `resume_versions.doc_json`
+    is read back as a ResumeDoc, which does carry contact, so writing the
+    TailoredResume straight in dropped the candidate's name, email, phone
+    and links from every saved run.
+
+    It was invisible in the happy path. The store merges the contact back on
+    the client, so the editor looked right for as long as the tab stayed
+    open, and the loss only appeared on reload - or in a PDF downloaded
+    after one. A resume with no name on it is the worst thing this product
+    could hand somebody, and nothing failed to report it.
+  */
+  contact: ResumeFacts["contact"];
   truth: TruthReport;
   report: AtsReport;
 };
@@ -120,7 +141,10 @@ export async function persistRun(input: PersistInput): Promise<PersistResult> {
       .from("resume_versions")
       .insert({
         resume_id: resumeId,
-        doc_json: input.tailored,
+        // The same merge the store does on the client. Contact last: it is
+        // the one part of the document the rewrite has no business setting,
+        // so it wins even if a future TailoredResume grows the field.
+        doc_json: { ...input.tailored, contact: input.contact },
         created_by: "ai_tailor",
       })
       .select("id")
