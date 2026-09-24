@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * Step two: choose a template, create the resume, open the editor.
+ * Step two: choose a template, then go and get the posting.
  *
  * The registry is read on the client because the picker renders the real
  * template components, and those have to be in the client bundle anyway for
- * the live preview to update without a round trip. The write that follows is
- * still a POST to /api/resumes.
+ * the live preview to update without a round trip.
  *
  * What is different from the generic version of this screen is `doc`. The
  * page above has already read the extraction for this upload and rebuilt the
@@ -14,6 +13,13 @@
  * are their resume in each layout rather than an invented person's. When
  * there is no upload, or nothing usable in it, `doc` is undefined and the
  * picker falls back to the fixture and labels it.
+ *
+ * THE WRITE MOVED. This screen used to `POST /api/resumes` and open the
+ * editor. The resume is now created one screen later, by `/start/job`, for
+ * one reason: a resume row created here and then abandoned on the posting
+ * step is a row nobody asked for, and the posting step is where the run that
+ * fills the row actually begins. Both choices travel in the query string,
+ * which is also what makes Back from step three lossless.
  */
 
 import { useRouter } from "next/navigation";
@@ -30,55 +36,17 @@ export function PickTemplateForDocument({
 }) {
   const router = useRouter();
   const [busyStep, setBusyStep] = useState<string | null>(null);
-  const [error, setError] = useState<{ reason: string; remedy: string } | null>(null);
 
-  async function confirm(templateId: string) {
-    setError(null);
-    setBusyStep("Creating your resume");
+  function confirm(templateId: string) {
+    // Named, like every other wait in this product. "Loading" would say
+    // nothing; this says which screen is coming.
+    setBusyStep("Opening the last step");
 
-    let response: Response;
-    try {
-      response = await fetch("/api/resumes", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        // documentId travels in the body, not just the URL: the resume has
-        // to record which upload it came from or the truth guard has no
-        // text to check against. See migration 0007.
-        body: JSON.stringify({ templateId, documentId }),
-      });
-    } catch {
-      setBusyStep(null);
-      setError({
-        reason: "The request did not reach the server.",
-        remedy: "Check your connection and press the button again.",
-      });
-      return;
-    }
+    const query = new URLSearchParams();
+    if (documentId) query.set("document", documentId);
+    query.set("template", templateId);
 
-    let payload: { ok?: boolean; id?: string; reason?: string; remedy?: string };
-    try {
-      payload = await response.json();
-    } catch {
-      setBusyStep(null);
-      setError({
-        reason: `The server answered with ${response.status} and no explanation.`,
-        remedy: "Try again. If it keeps happening, check the server logs.",
-      });
-      return;
-    }
-
-    if (!response.ok || !payload.ok || !payload.id) {
-      setBusyStep(null);
-      setError({
-        reason: payload.reason ?? "The resume could not be created.",
-        remedy: payload.remedy ?? "Try again in a moment.",
-      });
-      return;
-    }
-
-    setBusyStep("Opening the editor");
-    const query = documentId ? `?document=${encodeURIComponent(documentId)}` : "";
-    router.push(`/resume/${payload.id}${query}`);
+    router.push(`/start/job?${query.toString()}`);
   }
 
   return (
@@ -88,7 +56,7 @@ export function PickTemplateForDocument({
       doc={doc}
       onConfirm={confirm}
       busyStep={busyStep}
-      error={error}
+      error={null}
     />
   );
 }

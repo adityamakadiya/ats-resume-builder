@@ -1,7 +1,8 @@
 /**
  * /start/template
  *
- * Step two of two.
+ * Step two of three. The posting comes next, before the editor rather than
+ * from a drawer inside it.
  *
  * `?document=<uuid>` carries the upload from step one, and it is read here
  * rather than only forwarded. The extraction stored on `documents.facts_json`
@@ -50,7 +51,7 @@ export default async function TemplatePage(props: PageProps<"/start/template">) 
       </Link>
 
       <header className="mt-4 max-w-2xl">
-        <p className="label">Step 2 of 2</p>
+        <p className="label">Step 2 of 3</p>
         <h1 className="mt-2.5 font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
           Choose how it should look
         </h1>

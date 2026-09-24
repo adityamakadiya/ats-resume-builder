@@ -223,8 +223,29 @@ export async function loadRun(resumeId: string, documentId?: string): Promise<Lo
       ? resume.template_id
       : sample.templateId;
 
-  // A real row with nothing behind it. Keep what is real, sample the rest.
-  const shell: EditorRun = { ...sample, title, templateId };
+  /*
+    A real row with nothing behind it. Keep what is real, sample the rest,
+    and sample NOTHING that makes a claim about this candidate.
+
+    The document can be the fixture, because the banner above it says in so
+    many words that it is a sample and is not being stored. The analysis
+    cannot. A score, a gap list and a refusal list are all statements about
+    the person whose row this is, and this row has no posting attached: it
+    was created seconds ago by /api/resumes, or its version is unreadable.
+    Carrying the fixture's 56 out of 100, its two refused lines and its
+    "Rust appears in the requirements" note onto somebody else's resume is
+    exactly the confident fiction the nullable posting exists to end. Null
+    here is what makes the editor show its empty state instead.
+  */
+  const shell: EditorRun = {
+    ...sample,
+    title,
+    templateId,
+    job: null,
+    report: null,
+    truth: NO_VIOLATIONS,
+    gaps: NO_GAPS,
+  };
 
   const versionId = typeof resume.current_version_id === "string" ? resume.current_version_id : null;
 

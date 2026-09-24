@@ -1,25 +1,33 @@
 "use client";
 
 /**
- * Two lists that look similar and mean opposite things.
+ * The seam between the editor's left rail and the gap panel.
  *
- * `recoverable_keywords` are terms the original resume already claims and the
- * rewrite dropped. Putting one back adds nothing the candidate was not already
- * saying, so it is offered plainly, in the traced colour, and costs them
- * nothing.
+ * The panel itself is `KeywordGapPanel`, which is pure: it takes the posting,
+ * the facts, the document, the score and the gap analysis, and it hands a
+ * chosen placement back. This file is the twenty lines that connect it to the
+ * store, and it keeps the old name and the old props so the rail's single
+ * import line did not have to change.
  *
- * `missing_keywords` appear nowhere in the resume. They are shown rather than
- * hidden, because a gap you cannot see is a gap you cannot answer for in the
- * room. But adding one is the user asserting something, so it is styled as a
- * caution, worded as a warning, and counted as a hand edit that the traced
- * badge will keep reporting for as long as it stays.
+ * The one piece of judgement here is which store action an applied placement
+ * goes through, and it is the provenance rule in code:
  *
- * Collapsing these into one list of "suggested keywords" would turn this panel
- * into a fabrication button. They stay apart.
+ *   skills   `addSuggestion`, which records `asserted:<term>` in `editedKeys`
+ *            for an amber term and nothing for a green one. That distinction
+ *            is the traced badge's, and it stays where the store already
+ *            makes it rather than being reimplemented here.
+ *
+ *   bullet   `applyUserOps` with no keys, because a restored bullet is a line
+ *            the parsed resume already contains, put back verbatim, carrying
+ *            the source id it came with. It is traced, not asserted, and only
+ *            ever offered for a green term.
  */
 
 import type { AtsReport } from "@ats/core";
 import type { ResumeDoc } from "@ats/templates";
+import type { Placement, Suggestion } from "@/lib/editor/gaps";
+import { useEditorStore } from "@/lib/store/editor";
+import { KeywordGapPanel } from "./KeywordGapPanel";
 
 export type SuggestionChipsProps = {
   report: AtsReport | null;
@@ -27,89 +35,34 @@ export type SuggestionChipsProps = {
   onAdd: (term: string, kind: "recoverable" | "missing") => void;
 };
 
-function Chip({
-  term,
-  kind,
-  onAdd,
-}: {
-  term: string;
-  kind: "recoverable" | "missing";
-  onAdd: () => void;
-}) {
-  const recoverable = kind === "recoverable";
-  return (
-    <button
-      type="button"
-      onClick={onAdd}
-      data-kind={kind}
-      title={
-        recoverable
-          ? "Your resume already claims this, putting it back is free."
-          : "Not in your resume, add only if you can defend it."
-      }
-      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.75rem] transition-colors ${
-        recoverable
-          ? "border-traced/40 bg-traced-soft text-traced hover:border-traced"
-          : "border-caution/40 bg-caution-soft text-caution hover:border-caution"
-      }`}
-    >
-      <span aria-hidden="true" className="font-mono text-[0.625rem] leading-none">
-        +
-      </span>
-      {term}
-    </button>
-  );
-}
-
 export function SuggestionChips({ report, doc, onAdd }: SuggestionChipsProps) {
   /*
-    These terms come from the posting. With no posting they came from a
-    fixture, which is how a frontend resume ended up being told to add gRPC,
-    Terraform and Apache Flink: real suggestions, for somebody else's job.
+    The posting, the facts and the gap analysis come from the store rather
+    than from props. They are the same three values the score is already a
+    function of, and threading them through the rail would have meant editing
+    a file this change does not own.
   */
-  if (!report) return null;
+  const job = useEditorStore((s) => s.job);
+  const facts = useEditorStore((s) => s.facts);
+  const gaps = useEditorStore((s) => s.gaps);
+  const applyUserOps = useEditorStore((s) => s.applyUserOps);
 
-  const present = new Set(
-    doc.skills.flatMap((g) => g.items.map((i) => i.toLowerCase().trim())),
-  );
-  const recoverable = report.recoverable_keywords.filter((t) => !present.has(t.toLowerCase()));
-  const missing = report.missing_keywords.filter((t) => !present.has(t.toLowerCase()));
-
-  if (recoverable.length === 0 && missing.length === 0) return null;
+  function apply(suggestion: Suggestion, placement: Placement) {
+    if (placement.kind === "skills") {
+      onAdd(suggestion.term, suggestion.kind);
+      return;
+    }
+    applyUserOps(placement.ops, `Restored a line naming ${suggestion.term}`, []);
+  }
 
   return (
-    <section aria-labelledby="suggestions-heading" className="border-t border-rule pt-3">
-      <h2 id="suggestions-heading" className="label">
-        Terms the posting wants
-      </h2>
-
-      {recoverable.length > 0 && (
-        <div className="mt-2.5">
-          <p className="text-[0.75rem] leading-snug text-traced">
-            Already yours. Your resume claims these, the rewrite dropped them. Putting one
-            back is free.
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {recoverable.map((term) => (
-              <Chip key={term} term={term} kind="recoverable" onAdd={() => onAdd(term, "recoverable")} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {missing.length > 0 && (
-        <div className="mt-3">
-          <p className="text-[0.75rem] leading-snug text-caution">
-            Not in your resume. Add one only if you can defend it in an interview. It counts
-            as a hand edit.
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {missing.slice(0, 14).map((term) => (
-              <Chip key={term} term={term} kind="missing" onAdd={() => onAdd(term, "missing")} />
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
+    <KeywordGapPanel
+      job={job}
+      facts={facts}
+      doc={doc}
+      report={report}
+      gaps={gaps}
+      onApply={apply}
+    />
   );
 }

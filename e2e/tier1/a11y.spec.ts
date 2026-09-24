@@ -33,6 +33,17 @@ test("/start is still clean once the dropzone has refused a file", async ({ page
   await expectNoSeriousA11yViolations(page);
 });
 
+test("/start/job has no serious or critical accessibility violations", async ({ page }) => {
+  await page.goto("/start/job");
+  await expectNoSeriousA11yViolations(page);
+});
+
+test("/start/job is still clean with the link input showing", async ({ page }) => {
+  await page.goto("/start/job");
+  await page.getByRole("button", { name: /use a link/i }).click();
+  await expectNoSeriousA11yViolations(page);
+});
+
 test("/resumes has no serious or critical accessibility violations", async ({ page }) => {
   await page.goto("/resumes");
   await expectNoSeriousA11yViolations(page);

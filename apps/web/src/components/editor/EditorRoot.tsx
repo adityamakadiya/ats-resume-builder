@@ -80,6 +80,55 @@ function Panel({ children, className = "" }: { children: React.ReactNode; classN
   );
 }
 
+/**
+ * What the left rail says before there is a posting.
+ *
+ * A resume with nothing to aim at is a legitimate state, and a common one:
+ * it is every upload that skipped step three, and the editor must stay fully
+ * usable in it. Somebody may well have come here to fix one typo before
+ * thinking about a job at all, so nothing is blocked and nothing is covered.
+ *
+ * What is not acceptable is leaving the score panel and the keyword panel on
+ * screen with nothing in them and no way to fill them. So the two of them
+ * collapse into this: the cost, stated once, and the one action that pays
+ * it. The document below carries on exactly as it is.
+ */
+function NoPosting({ onAdd }: { onAdd: () => void }) {
+  return (
+    <section
+      aria-labelledby="no-posting-heading"
+      className="rounded-xl border border-stamp/30 bg-stamp-soft/50 px-4 py-4"
+    >
+      <p className="label text-stamp">Nothing to aim at yet</p>
+      <h2
+        id="no-posting-heading"
+        className="mt-1.5 font-display text-[1.375rem] leading-tight font-semibold text-ink"
+      >
+        Add the job posting
+      </h2>
+      <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-muted">
+        The score and the keyword suggestions are both comparisons against one
+        posting, so until there is one they have nothing to report. Paste the
+        posting or give us the link and both fill in, along with the gaps a
+        screener would stop on.
+      </p>
+
+      <button
+        type="button"
+        onClick={onAdd}
+        className="mt-3.5 h-11 w-full rounded-lg bg-stamp px-4 text-[0.9375rem] font-medium text-paper-raised transition-colors hover:bg-[color:var(--stamp-strong)]"
+      >
+        Add a posting
+      </button>
+
+      <p className="mt-2.5 text-[0.75rem] leading-relaxed text-ink-faint">
+        Your resume stays editable meanwhile. Every change you make here is
+        kept and carried into the rewrite.
+      </p>
+    </section>
+  );
+}
+
 export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: string | null }) {
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -88,6 +137,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const resumeId = useEditorStore((s) => s.resumeId);
   const title = useEditorStore((s) => s.title);
   const doc = useEditorStore((s) => s.doc);
+  const job = useEditorStore((s) => s.job);
   const report = useEditorStore((s) => s.report);
   const breakdown = useEditorStore((s) => s.breakdown);
   const gaps = useEditorStore((s) => s.gaps);
@@ -188,7 +238,18 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         {/* left */}
         <Panel className="lg:overflow-y-auto">
           <aside aria-label="Score and document" className="px-4 py-4">
-          <ScoreCard report={report} breakdown={breakdown} />
+          {/*
+            With no posting there is nothing to score against and nothing to
+            suggest, so neither panel is drawn. One prompt stands in their
+            place, carrying the single action that turns both of them on.
+            Two panels of empty state stacked above each other would read as
+            a product that is broken rather than one that is waiting.
+          */}
+          {job ? (
+            <ScoreCard report={report} breakdown={breakdown} />
+          ) : (
+            <NoPosting onAdd={() => store.setTailorOpen(true)} />
+          )}
 
           <div className="mt-4">
             <TracedBadge
@@ -200,9 +261,11 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
             />
           </div>
 
-          <div className="mt-4">
-            <SuggestionChips report={report} doc={doc} onAdd={store.addSuggestion} />
-          </div>
+          {job && (
+            <div className="mt-4">
+              <SuggestionChips report={report} doc={doc} onAdd={store.addSuggestion} />
+            </div>
+          )}
 
           <div className="mt-4">
             {gaps.recruiter_concerns.length > 0 && (

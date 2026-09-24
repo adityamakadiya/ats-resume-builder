@@ -24,7 +24,10 @@ test.describe("/start", () => {
     ).toBeVisible();
 
     // The step counter is a promise about length, so it has to be there.
-    await expect(page.getByText(/step 1 of 2/i)).toBeVisible();
+    // Three since the posting became a step of its own: upload, template,
+    // posting. It read "1 of 2" while the posting was asked for after the
+    // editor had already opened, which made the count true and useless.
+    await expect(page.getByText(/step 1 of 3/i)).toBeVisible();
 
     // The two ways in.
     await expect(page.getByRole("button", { name: /drop your resume here/i })).toBeVisible();

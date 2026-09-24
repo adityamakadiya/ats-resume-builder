@@ -1,9 +1,10 @@
 /**
- * /start and /resumes at 375px, which is an iPhone SE and still the
- * narrowest thing worth supporting.
+ * /start, /start/job and /resumes at 375px, which is an iPhone SE and still
+ * the narrowest thing worth supporting.
  *
- * It used to be /login, which is gone. These are the two screens a visit
- * now begins on.
+ * It used to be /login, which is gone. These are the screens a visit now
+ * begins on, and /start/job is on the list because it carries the widest
+ * thing in the funnel: a textarea holding a whole job posting.
  *
  * Two failures are being looked for. A horizontal scrollbar, which on a
  * touch device means the page slides sideways under the thumb and the layout
@@ -17,7 +18,7 @@ const NARROW = { width: 375, height: 667 };
 
 test.use({ viewport: NARROW });
 
-for (const path of ["/start", "/resumes"]) {
+for (const path of ["/start", "/start/job", "/resumes"]) {
   test(`no horizontal scroll at 375px on ${path}`, async ({ page }) => {
     await page.goto(path);
 
