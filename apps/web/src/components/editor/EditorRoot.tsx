@@ -20,6 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { EditorRun } from "@/lib/editor/fixtures";
 import { countLines } from "@/lib/editor/doc";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/lib/store/editor";
 import { FormPanel } from "./FormPanel";
 import { PreviewPane } from "./PreviewPane";
+import { AttestDialog, type AttestTarget } from "./AttestDialog";
 import { CeilingLine } from "./CeilingLine";
 import { ScoreBars, ScoreCard } from "./ScoreCard";
 import { RefusedLines } from "./RefusedLines";
@@ -174,6 +176,14 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const report = useEditorStore((s) => s.report);
   const breakdown = useEditorStore((s) => s.breakdown);
   const ceiling = useEditorStore((s) => s.ceiling);
+  const [attesting, setAttesting] = useState<AttestTarget>(null);
+  /*
+    The upload behind this resume. Attested facts hang off the document
+    rather than the resume, because the ledger is a record of what is known
+    about a person's history and survives a resume being rewritten or
+    thrown away.
+  */
+  const sourceDocumentId = useSearchParams().get("document");
   const gaps = useEditorStore((s) => s.gaps);
   const facts = useEditorStore((s) => s.facts);
   const editedKeys = useEditorStore((s) => s.editedKeys);
@@ -315,7 +325,10 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
             {job ? (
               <>
                 <ScoreCard report={report} breakdown={breakdown} detail={false} />
-                <CeilingLine ceiling={ceiling} />
+                <CeilingLine
+                  ceiling={ceiling}
+                  onAttest={(term) => setAttesting({ term })}
+                />
               </>
             ) : (
               <NoPosting onAdd={() => store.setTailorOpen(true)} />
@@ -479,6 +492,27 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
       )}
 
       <TailorPanel open={tailorOpen} onClose={() => store.setTailorOpen(false)} />
+
+      <AttestDialog
+        target={attesting}
+        facts={facts}
+        onClose={() => setAttesting(null)}
+        onAttest={({ groupId, text }) => {
+          const factKey = store.attestFact({ groupId, text });
+          if (!factKey || !sourceDocumentId) return;
+          /*
+            Fire and forget. The fact is already live in the editor, so a
+            failed write costs a reload rather than the user's typing, and
+            blocking the dialog on a round trip would make the common case
+            feel slower for a failure that is rare and recoverable.
+          */
+          void fetch("/api/facts/attest", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ documentId: sourceDocumentId, factKey, text }),
+          }).catch(() => {});
+        }}
+      />
 
     </div>
   );

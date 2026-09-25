@@ -85,6 +85,23 @@ export function readString(doc: ResumeDoc, path: string): string {
  * trace back to something the original resume says; it has no opinion about a
  * line the user typed afterwards, and the badge has to say so.
  */
+/**
+ * A fact the user supplied rather than the parser.
+ *
+ * Attested bullets are appended to the ledger with a key like `E1.A1`, next
+ * to the parsed `E1.B3`, because the suggestion machinery already knows how
+ * to offer a fact that is in the ledger and not in the document. The `.A`
+ * is what keeps them distinguishable afterwards, and they have to stay
+ * distinguishable: the whole claim this product makes is that a traced line
+ * came out of the uploaded file. A line the user told us about is true, very
+ * probably, but it is their word and not the document's, and counting it as
+ * traced would quietly turn the provenance number into a number that means
+ * nothing.
+ */
+export function isAttested(sourceId: string): boolean {
+  return /\.A\d+$/.test(sourceId);
+}
+
 export function countLines(doc: ResumeDoc): { total: number; traced: number } {
   let total = 0;
   let traced = 0;
@@ -92,7 +109,8 @@ export function countLines(doc: ResumeDoc): { total: number; traced: number } {
   const line = (text: string, sourceIds: string[]) => {
     if (!text.trim()) return;
     total += 1;
-    if (sourceIds.length > 0) traced += 1;
+    // Sourced to the document, not merely sourced. See `isAttested`.
+    if (sourceIds.some((id) => !isAttested(id))) traced += 1;
   };
 
   line(doc.summary.text, doc.summary.source_ids);

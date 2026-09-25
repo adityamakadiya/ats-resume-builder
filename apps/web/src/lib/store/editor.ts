@@ -187,6 +187,18 @@ export type EditorActions = {
   applyUserOps: (ops: Op[], label: string, keys?: string[]) => void;
 
   addSuggestion: (term: string, kind: "recoverable" | "missing") => void;
+  /**
+   * Record something the user did that the resume never said.
+   *
+   * Appends a bullet to the fact ledger under the role it belongs to. The
+   * suggestion machinery then offers it exactly as it offers a dropped
+   * line, because "a fact that exists and is not in the document" is the
+   * same shape either way - the only difference is that this one is the
+   * user's word and is never counted as traced.
+   *
+   * Returns the fact key so the caller can persist it.
+   */
+  attestFact: (input: { groupId: string; text: string }) => string | null;
 
   stagePatch: (patch: { ops: Op[]; rationale: string; origin?: PatchOrigin; id?: string }) => string | null;
   acceptPatch: (id: string) => void;
@@ -456,6 +468,40 @@ export const useEditorStore = create<EditorStore>()(
         // ceiling is worth its 30ms.
         state.ceiling = ceilingFor(state.job, state.facts, state.doc, state.report, state.gaps);
       }),
+
+    attestFact: ({ groupId, text }) => {
+      const clean = text.trim();
+      if (!clean) return null;
+
+      let key: string | null = null;
+      set((state) => {
+        const group =
+          state.facts.experience.find((e) => e.id === groupId) ??
+          state.facts.projects.find((p) => p.id === groupId);
+        if (!group) return;
+
+        /*
+          `.A` rather than `.B`, and numbered independently, so an attested
+          line can never collide with a parsed one and stays identifiable
+          for the rest of the document's life. See `isAttested`.
+        */
+        const existing = group.bullets.filter((b) => /\.A\d+$/.test(b.id)).length;
+        key = `${groupId}.A${existing + 1}`;
+        group.bullets.push({ id: key, text: clean });
+
+        /*
+          The document is untouched. Attesting makes a line available, it
+          does not write it in: the user still chooses the placement, and
+          they see what it is worth before they take it. Rescoring is still
+          needed because the term has just moved from "missing" to
+          "recoverable" as far as the scorer is concerned.
+        */
+        rescore(state);
+        state.ceiling = ceilingFor(state.job, state.facts, state.doc, state.report, state.gaps);
+      });
+
+      return key;
+    },
 
     /* -------------------------------------------------------- patches -- */
 

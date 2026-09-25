@@ -34,7 +34,14 @@ const NOT_WINNABLE = 55;
 /** Worth calling out as a real work list rather than a rounding error. */
 const WORTH_DOING = 3;
 
-export function CeilingLine({ ceiling }: { ceiling: Ceiling | null }) {
+export function CeilingLine({
+  ceiling,
+  onAttest,
+}: {
+  ceiling: Ceiling | null;
+  /** Opens the "where did you use this" dialog for one term. */
+  onAttest?: (term: string) => void;
+}) {
   if (!ceiling) return null;
 
   const { current, ceiling: top, headroom, steps, blockedByEvidence } = ceiling;
@@ -81,12 +88,31 @@ export function CeilingLine({ ceiling }: { ceiling: Ceiling | null }) {
         </p>
       )}
 
+      {/*
+        The refusal becomes a question. Naming the terms without offering a
+        way to answer for them is where this used to stop, and a correct
+        refusal with no next move reads as the product being unable to help.
+      */}
       {blockedByEvidence.length > 0 && (
-        <p className="mt-2 text-[0.75rem] leading-snug text-caution">
-          Higher than {top.toFixed(0)} needs evidence this resume does not carry:{" "}
-          <span className="text-ink">{blockedByEvidence.slice(0, 5).join(", ")}</span>. If you have
-          done these, say where and they stop being guesses.
-        </p>
+        <div className="mt-2">
+          <p className="text-[0.75rem] leading-snug text-caution">
+            Going above {top.toFixed(0)} needs evidence this resume does not carry. If you
+            have done these, say where and they stop being guesses.
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {blockedByEvidence.slice(0, 6).map((term) => (
+              <button
+                key={term}
+                type="button"
+                onClick={() => onAttest?.(term)}
+                disabled={!onAttest}
+                className="rounded-md border border-caution/40 bg-caution-soft px-2 py-0.5 text-[0.75rem] text-caution transition-colors hover:border-caution disabled:opacity-60"
+              >
+                I have used {term}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </section>
   );

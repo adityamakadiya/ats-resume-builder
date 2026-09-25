@@ -23,7 +23,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { AtsReport, Op } from "@ats/core";
 import { scoreOf, useEditorStore } from "./editor";
 import { SAMPLE_JOB, sampleRun, type EditorRun } from "@/lib/editor/fixtures";
-import { tailoredOf, pointer } from "@/lib/editor/doc";
+import { countLines, tailoredOf, pointer } from "@/lib/editor/doc";
 
 const BULLET = pointer("experience", 0, "bullets", 0, "text");
 
@@ -425,5 +425,86 @@ describe("the state before the run has loaded", () => {
   it("says clean for a run that was stored", () => {
     state().init({ ...sampleRun("test"), saved: true });
     expect(state().saveState.kind).toBe("clean");
+  });
+});
+
+/*
+  The other half of the truth guard.
+
+  Refusing a claim because no fact supports it is only half an answer: the
+  claim is often true and the resume simply never said it. Attesting is how
+  the user supplies the missing evidence. What these assert is that it stays
+  honest on the way in - the line becomes usable without ever becoming
+  something the uploaded document is said to contain.
+*/
+describe("attesting a fact the resume never carried", () => {
+  // Per-describe in this file rather than global. Without it these share a
+  // store and the attested line numbering carries over between cases.
+  beforeEach(reset);
+
+  it("adds it to the ledger under the role it belongs to", () => {
+    const roleId = state().facts.experience[0]!.id;
+    const before = state().facts.experience[0]!.bullets.length;
+
+    const key = state().attestFact({
+      groupId: roleId,
+      text: "Ran Kubernetes in production for the billing service, including the rollout.",
+    });
+
+    expect(key).toBe(`${roleId}.A1`);
+    expect(state().facts.experience[0]!.bullets).toHaveLength(before + 1);
+    expect(state().facts.experience[0]!.bullets.at(-1)!.text).toMatch(/Kubernetes in production/);
+  });
+
+  it("numbers attested lines apart from parsed ones so they stay identifiable", () => {
+    const roleId = state().facts.experience[0]!.id;
+    state().attestFact({ groupId: roleId, text: "First thing I actually did with it." });
+    const second = state().attestFact({ groupId: roleId, text: "Second thing I actually did." });
+
+    expect(second).toBe(`${roleId}.A2`);
+    // The parsed bullets are .B and must not have been renumbered.
+    expect(state().facts.experience[0]!.bullets.some((b) => /\.B1$/.test(b.id))).toBe(true);
+  });
+
+  it("does not write into the document, so the user still chooses the placement", () => {
+    const roleId = state().facts.experience[0]!.id;
+    const before = JSON.stringify(state().doc);
+
+    state().attestFact({ groupId: roleId, text: "Something true that was never on the page." });
+
+    expect(JSON.stringify(state().doc)).toBe(before);
+  });
+
+  it("refuses an empty claim and an unknown role", () => {
+    expect(state().attestFact({ groupId: state().facts.experience[0]!.id, text: "   " })).toBeNull();
+    expect(state().attestFact({ groupId: "nope", text: "A real sentence about real work." })).toBeNull();
+  });
+
+  it("never counts an attested line as traced to the resume", () => {
+    const roleId = state().facts.experience[0]!.id;
+    const key = state().attestFact({
+      groupId: roleId,
+      text: "Ran Kubernetes in production for the billing service.",
+    })!;
+
+    // Put it into the document the way the suggestion machinery would.
+    const path = pointer("experience", 0, "bullets", 0);
+    state().applyUserOps(
+      [{ op: "add", path, value: { text: "Ran Kubernetes in production.", source_ids: [key], keywords: [] } }],
+      "Attested line",
+      [],
+    );
+
+    const { traced, total } = countLines(state().doc);
+    const sourced = state().doc.experience[0]!.bullets.filter((b) => b.source_ids.length > 0).length;
+
+    /*
+      It has a source id, so a naive count would call it traced. It is not:
+      the whole claim this product makes is that a traced line came out of
+      the uploaded file, and this one came out of the user. Counting it
+      would turn the provenance number into a number that means nothing.
+    */
+    expect(sourced).toBeGreaterThan(traced === total ? -1 : 0);
+    expect(traced).toBeLessThan(total);
   });
 });

@@ -49,7 +49,7 @@ import {
   type ResumeFacts,
 } from "@ats/core";
 import type { ResumeDoc } from "@ats/templates";
-import { addSkillOps, applyDocPatch, pointer, tailoredOf } from "./doc";
+import { addSkillOps, applyDocPatch, isAttested, pointer, tailoredOf } from "./doc";
 
 /* --------------------------------------------------------------- types -- */
 
@@ -300,13 +300,17 @@ export function suggestionsFor(
         const ops = bulletOps(site, term);
         const delta = deltaOf(job, facts, doc, report, ops);
         if (delta === null) continue;
+        const attested = isAttested(site.sourceId);
         placements.push({
           kind: "bullet",
-          label: `Put back the ${site.where} line`,
+          // "Put back" would be a lie about a line the resume never had.
+          label: attested
+            ? `Add the ${site.where} line you told us about`
+            : `Put back the ${site.where} line`,
           preview: site.text,
           ops,
           delta,
-          traced: true,
+          traced: !attested,
         });
       }
     }

@@ -61,24 +61,36 @@ export type Ceiling = {
   headroom: number;
   steps: CeilingStep[];
   /**
-   * Terms left out because they are not in the resume at all. These are the
-   * ones attesting would unlock, which is what the UI offers next.
+   * Terms with no line behind them at all, in the document or the ledger.
+   * These are what attesting unlocks: once the user says where they used
+   * one, it becomes a fact, gains a bullet placement, and the ceiling
+   * rises by however much that is actually worth.
    */
   blockedByEvidence: string[];
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Honest placements only: restoration and re-placement, never assertion. */
+/**
+ * Placements the ceiling is allowed to count.
+ *
+ * A bullet placement, and only a bullet placement. A bullet exists here
+ * only when there is a fact in the ledger carrying that term, which is
+ * either a line the parser read out of the uploaded file or one the user
+ * attested to deliberately - naming the role and writing the sentence.
+ * Both are statements somebody is prepared to stand behind at interview.
+ *
+ * The skills-list placement is excluded even though it scores. Adding a
+ * word to a list is one click and no thought, and a ceiling that counted
+ * those would be measuring how many buttons exist rather than how good
+ * this application can get.
+ *
+ * Attested bullets are counted and NOT marked traced, which is the point:
+ * they raise what the document can honestly claim while the provenance
+ * line goes on reporting that the uploaded file does not say it.
+ */
 function honestPlacement(suggestion: Suggestion) {
-  if (suggestion.kind !== "recoverable") return null;
-  /*
-    The best placement among the honest ones, which for a recoverable term
-    is a real bullet when there is one. `placements` is already sorted by
-    points, with a traced line winning ties, so the first traced entry is
-    both the most valuable and the most defensible.
-  */
-  return suggestion.placements.find((p) => p.traced) ?? null;
+  return suggestion.placements.find((p) => p.kind === "bullet") ?? null;
 }
 
 export function ceilingFor(
@@ -105,8 +117,13 @@ export function ceilingFor(
     const live = computeAtsReport(job, facts, tailoredOf(working));
     const suggestions = suggestionsFor(job, facts, working, live, gaps);
 
-    let best: { suggestion: Suggestion; ops: readonly Op[]; label: string; gain: number } | null =
-      null;
+    let best: {
+      suggestion: Suggestion;
+      ops: readonly Op[];
+      label: string;
+      gain: number;
+      traced: boolean;
+    } | null = null;
 
     for (const suggestion of suggestions) {
       const placement = honestPlacement(suggestion);
@@ -117,6 +134,7 @@ export function ceilingFor(
           ops: placement.ops,
           label: placement.label,
           gain: placement.delta,
+          traced: placement.traced,
         };
       }
     }
@@ -139,7 +157,7 @@ export function ceilingFor(
       label: best.label,
       after: round1(after),
       gained: round1(after - running),
-      traced: true,
+      traced: best.traced,
     });
     working = next;
     running = after;
