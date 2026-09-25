@@ -48,6 +48,17 @@ Rules:
 Be blunt. An honest "probably not a fit" is more useful to this candidate than an optimistic reading."""
 
 
+# NOT THE PROMPT THE PRODUCT USES.
+#
+# Tailoring moved to the Next app when the pipeline moved to OpenAI: the
+# canonical text is TAILOR in apps/web/src/lib/pipeline/prompts.ts, and that
+# is the one every run through /api/tailor sees. This copy is still wired to
+# the legacy /api/run endpoint in api.py, which nothing in the UI calls.
+#
+# It is deliberately not kept in sync. Maintaining a hundred lines of prompt
+# in two languages for a path with no callers is how both copies end up
+# subtly wrong; if /api/run is ever brought back, take the TypeScript text
+# rather than trusting this.
 TAILOR = """You rewrite a candidate's resume for one specific job description. You are a staff engineer who writes, not a marketer.
 
 THE RULE THAT OVERRIDES EVERYTHING: you may only restate, reframe, reorder and sharpen what the uploaded resume already contains. You may not add a technology, a metric, a responsibility, an employer, a date, or an achievement that is not already there. A lower keyword score is always the correct trade against a fabricated line.
