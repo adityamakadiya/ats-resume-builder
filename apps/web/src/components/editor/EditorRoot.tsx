@@ -302,11 +302,14 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
           */}
 
           {/*
-            Sticky, because the number is the reason the page exists and
-            scrolling to the form should not cost sight of it. The whole
-            point of an edit here is watching it move.
+            Not sticky. It was, on the argument that watching the number
+            move is the point of an edit here - but the form is in the same
+            scrolling column, so the header followed you down it and took a
+            bite out of every screen of the document for a number that only
+            changes when you finish a field. The preview beside it never
+            moves, and that is the thing worth keeping in view.
           */}
-          <div className="sticky top-0 z-10 -mx-4 -mt-4 bg-paper-raised px-4 pt-4 pb-3">
+          <div className="pb-1">
             {job ? (
               <ScoreCard report={report} breakdown={breakdown} detail={false} />
             ) : (
