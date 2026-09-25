@@ -107,9 +107,9 @@ export function Toolbar({
 
     if (!result.ok) {
       /*
-        Not an error. The download is the one thing that needs an account,
-        so a 401 here is the product working: open the dialog, and the
-        download resumes by itself once there is a session.
+        `needsSignIn` is still handled although the route no longer sends a
+        401: the gate is off rather than deleted, and leaving the branch
+        here means putting it back is a server-side change on its own.
       */
       if (result.needsSignIn) {
         setSignInOpen(true);

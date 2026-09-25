@@ -166,44 +166,14 @@ describe("POST /api/render", () => {
 });
 
 
-describe("the download gate", () => {
-  /*
-    The gate is on the server, not in the dialog. This route turns HTML into
-    a PDF, which makes it worth calling directly, and a check the browser
-    does would hand a signed-out caller exactly the thing the dialog is
-    asking them to sign in for.
-  */
-  it("refuses a signed-out caller with a 401 and a reason", async () => {
-    signedOut();
+/*
+  The gate tests are gone with the gate. They asserted a 401 for a
+  signed-out caller and that the document service was never touched; both
+  are now false by design, and a test asserting the old behaviour would
+  fail for the right reason and read as a regression.
 
-    const response = await POST(post({ html: "<!doctype html><html></html>" }));
-    expect(response.status).toBe(401);
-
-    const body = (await response.json()) as { reason: string; remedy: string };
-    expect(body.reason).toMatch(/sign in/i);
-    // The fear at this point is losing the work, so the answer says so.
-    expect(body.remedy).toMatch(/saved/i);
-  });
-
-  it("refuses before the document service is touched at all", async () => {
-    signedOut();
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-    await POST(post({ html: "<!doctype html><html></html>" }));
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("lets a signed-in caller through", async () => {
-    signedIn();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(new Uint8Array([37, 80, 68, 70]), {
-        status: 200,
-        headers: { "Content-Type": "application/pdf" },
-      }),
-    );
-
-    const response = await POST(post({ html: "<!doctype html><html></html>" }));
-    expect(response.status).toBe(200);
-  });
-});
+  What they were protecting is written down in the route instead: the
+  check was server-side because a browser-side one would hand a signed-out
+  caller exactly what the dialog asks them to sign in for. If the gate
+  comes back, so do these.
+*/

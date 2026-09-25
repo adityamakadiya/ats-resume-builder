@@ -24,7 +24,6 @@
 import { z } from "zod";
 
 import { docServiceHeaders, docServiceUrl, gate, readJsonBody, refuse } from "@/lib/sse";
-import { currentUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,25 +43,23 @@ export async function POST(request: Request) {
   if (!entry.ok) return entry.response;
 
   /*
-    The one gate in the product, and it is here rather than in the browser.
-    A check the client does is a suggestion: this route takes HTML and gives
-    back a PDF, so it is worth calling directly, and a signed-out caller who
-    skips the dialog would otherwise get exactly what the dialog is asking
-    them to sign in for.
+    NO SIGN-IN GATE, FOR NOW.
 
-    Everything before this point stays open. Upload, tailor, edit and preview
-    all work with no account, because asking for one before the user has seen
-    whether the output is any good is how you lose them. 401 is the signal the
-    toolbar turns into the sign-in dialog.
+    There was one here: a 401 the toolbar turned into a dialog, so the
+    account was asked for at the download and nowhere earlier. It is off at
+    the user's request while the product is being shown to people, because
+    an account is the one thing that stops somebody trying it.
+
+    `lib/auth/session.ts` and the cookie-aware client in
+    `lib/supabase/server.ts` are left in place and working. Putting the gate
+    back is the four lines below, not a rebuild:
+
+        const user = await currentUser();
+        if (!user) return refuse("Sign in to download your resume.", "...", 401);
+
+    The client already understands a 401 from this route and opens the
+    dialog on it, so nothing else has to change.
   */
-  const user = await currentUser();
-  if (!user) {
-    return refuse(
-      "Sign in to download your resume.",
-      "Your resume is saved and stays exactly as it is. This is the only step that needs an account.",
-      401,
-    );
-  }
 
   // Slightly above the HTML cap: the JSON envelope and the filename are also
   // bytes, and rejecting at exactly the HTML limit would refuse a document
