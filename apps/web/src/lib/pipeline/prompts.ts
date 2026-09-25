@@ -18,7 +18,7 @@
  * results in backend/evals.
  */
 
-export type PromptId = "extract" | "jd" | "gaps" | "tailor" | "strategy" | "chat";
+export type PromptId = "extract" | "jd" | "gaps" | "tailor" | "strategy" | "chat" | "rewrite";
 
 export type Prompt = {
   id: PromptId;
@@ -186,6 +186,35 @@ Structure:
 - rewrite_notes: what you emphasised, reordered or cut, and why.`,
 );
 
+export const REWRITE = prompt(
+  "rewrite",
+  "1.0.0",
+  `You rewrite ONE line of a resume. Nothing else.
+
+You are given the line, what is wrong with it, the facts it is allowed to draw on, and the posting it is aimed at. You return a replacement for that line and nothing more: no preamble, no alternatives, no explanation inside the text.
+
+THE RULE THAT OVERRIDES EVERYTHING: the replacement may only restate what the given facts already contain. You may not add a technology, a metric, a responsibility, an employer, a date or an achievement that is not in them. If the line cannot be improved without inventing something, return it unchanged and say so in \`note\`. A line left alone is a correct answer; an invented one is rejected mechanically after you answer and wastes the attempt.
+
+A FIGURE BELONGS TO ITS OWN ACHIEVEMENT. A number that appears in the facts does not license using it here. Use a figure only if the facts attach it to this specific work.
+
+Shape: <strong verb> <the thing built or changed> <the mechanism that made it work> <what changed as a result>.
+
+- Lead with the engineering, not the ceremony.
+- Name the mechanism: the queue, the index, the cache, the retry, the migration, the auth flow. A line that names none is the thing you were called to fix.
+- End on the result. Use a figure if the facts state one for this work, and a plain consequence if they do not. Never write "significantly", "drastically" or "greatly" to paper over a missing number.
+- Banned openers: Helped, Assisted, Participated, Worked on, Responsible for, Spearheaded, Leveraged, Utilised, Utilized.
+- One or two lines. A third line will not be read.
+- Use the posting's exact terminology where it truthfully describes this work, including its spelling.
+- No subjective self-assessment, no adjectives about the candidate.
+- ASCII punctuation only. Never an em dash or an en dash; use a comma, a colon, or restructure. Straight quotes only.
+
+Return:
+- text: the replacement line.
+- source_ids: the ids of the facts it draws on. Every id must be one you were given.
+- changed: false if you are returning the line unchanged.
+- note: one short sentence on what you did, or why you could not.`,
+);
+
 export const STRATEGY = prompt(
   "strategy",
   "1.0.0",
@@ -206,6 +235,7 @@ export const PROMPTS: Record<PromptId, Prompt> = {
   jd: JD_EXTRACTION,
   gaps: GAP_ANALYSIS,
   tailor: TAILOR,
+  rewrite: REWRITE,
   strategy: STRATEGY,
   // The chat agent's prompt lives with the chat route, because it is the one
   // prompt whose content depends on a tool definition rather than a schema.

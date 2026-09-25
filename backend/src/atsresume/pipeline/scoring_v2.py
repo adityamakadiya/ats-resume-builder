@@ -234,10 +234,19 @@ TITLE_UNKNOWN = 70.0
 
 # Ceremony openers. Same set as evals/scorers.py BANNED_OPENERS, restated here
 # because evals/ is a test harness and src/ must not import from it.
+# These are compared against `_first_word`, which normalises, so they have to
+# be stored in normalised form. "utilised" and "utilized" were not: normalise
+# stems the ise/ize suffix, so both become "utilis" and neither of the two
+# spellings stored here ever matched. Two dead entries in a nine-word set,
+# for one of the most common words on a badly written resume and one the
+# tailor prompt explicitly bans. Found by a writing-suggestion rule that
+# reuses this set and disagreed with the score.
 BANNED_OPENERS = frozenset(
     {
         "helped", "assisted", "participated", "worked", "responsible",
-        "spearheaded", "leveraged", "utilised", "utilized",
+        "spearheaded", "leveraged",
+        # normalise("utilised") == normalise("utilized") == "utilis"
+        "utilis",
     }
 )
 

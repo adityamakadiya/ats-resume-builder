@@ -24,7 +24,7 @@
  * against it. Do not quote them at anyone.
  */
 
-export type Step = "extract" | "analyze" | "gaps" | "tailor" | "strategy" | "chat";
+export type Step = "extract" | "analyze" | "gaps" | "tailor" | "strategy" | "chat" | "rewrite";
 
 export type Effort = "minimal" | "low" | "medium" | "high";
 
@@ -71,6 +71,10 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     tailor: { model: LARGE, effort: "low", maxOutputTokens: 24_000 },
     strategy: { model: SMALL, effort: "minimal", maxOutputTokens: 8_000 },
     chat: { model: SMALL, effort: "low", maxOutputTokens: 8_000 },
+    // One line in, one line out. The cheapest call in the product and the
+    // only one someone waits on with the cursor still in the document, so
+    // it is small and low effort in every profile.
+    rewrite: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
   },
   balanced: {
     extract: { model: SMALL, effort: "medium", maxOutputTokens: 16_000 },
@@ -81,6 +85,7 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     tailor: { model: LARGE, effort: "medium", maxOutputTokens: 24_000 },
     strategy: { model: SMALL, effort: "low", maxOutputTokens: 8_000 },
     chat: { model: LARGE, effort: "low", maxOutputTokens: 8_000 },
+    rewrite: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
   },
   thorough: {
     extract: { model: LARGE, effort: "medium", maxOutputTokens: 16_000 },
@@ -89,6 +94,7 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     tailor: { model: LARGE, effort: "high", maxOutputTokens: 32_000 },
     strategy: { model: LARGE, effort: "medium", maxOutputTokens: 8_000 },
     chat: { model: LARGE, effort: "medium", maxOutputTokens: 8_000 },
+    rewrite: { model: LARGE, effort: "low", maxOutputTokens: 1_500 },
   },
 };
 

@@ -127,9 +127,18 @@ export const TITLE_UNKNOWN = 70;
 /* Vocabularies                                                        */
 /* ------------------------------------------------------------------ */
 
+/*
+  Compared against `firstWord`, which normalises, so these have to be stored
+  normalised. "utilised" and "utilized" were not: normalise stems the ise/ize
+  suffix so both become "utilis", and neither stored spelling ever matched.
+  Two dead entries out of nine, for one of the most common words on a badly
+  written resume and one the tailor prompt explicitly bans.
+*/
 export const BANNED_OPENERS: ReadonlySet<string> = new Set([
   'helped', 'assisted', 'participated', 'worked', 'responsible',
-  'spearheaded', 'leveraged', 'utilised', 'utilized',
+  'spearheaded', 'leveraged',
+  // normalise('utilised') === normalise('utilized') === 'utilis'
+  'utilis',
 ]);
 
 export const FILLER_PHRASES: readonly string[] = [

@@ -36,7 +36,7 @@ import { AttestDialog, type AttestTarget } from "./AttestDialog";
 import { CeilingLine } from "./CeilingLine";
 import { ScoreBars, ScoreCard } from "./ScoreCard";
 import { RefusedLines } from "./RefusedLines";
-import { SuggestionChips } from "./SuggestionChips";
+import { SuggestionsPanel } from "./SuggestionsPanel";
 import { TailorPanel } from "./TailorPanel";
 import { Toolbar } from "./Toolbar";
 import { TracedBadge } from "./TracedBadge";
@@ -342,8 +342,25 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
             rather than a description.
           */}
           {job && (
-            <div className="mt-1">
-              <SuggestionChips report={report} doc={doc} onAdd={store.addSuggestion} />
+            <div className="mt-3">
+              <SuggestionsPanel
+                report={report}
+                doc={doc}
+                facts={facts}
+                job={job}
+                gaps={gaps}
+                onAddKeyword={store.addSuggestion}
+                /*
+                  No edited key. The provenance badge marks a hand edit as
+                  something the guard did not check, and that is the whole
+                  value of the mark. A rewrite from /api/suggest was put
+                  back into the document and run through the same guard as
+                  a tailoring run before it was ever shown, so calling it
+                  unchecked would understate what the product did and
+                  inflate the hand-edit count against the user.
+                */
+                onApply={(ops, label) => store.applyUserOps(ops, label, [])}
+              />
             </div>
           )}
 
