@@ -31,6 +31,7 @@ import {
 } from "@/lib/store/editor";
 import { FormPanel } from "./FormPanel";
 import { PreviewPane } from "./PreviewPane";
+import { CeilingLine } from "./CeilingLine";
 import { ScoreBars, ScoreCard } from "./ScoreCard";
 import { RefusedLines } from "./RefusedLines";
 import { SuggestionChips } from "./SuggestionChips";
@@ -172,6 +173,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const job = useEditorStore((s) => s.job);
   const report = useEditorStore((s) => s.report);
   const breakdown = useEditorStore((s) => s.breakdown);
+  const ceiling = useEditorStore((s) => s.ceiling);
   const gaps = useEditorStore((s) => s.gaps);
   const facts = useEditorStore((s) => s.facts);
   const editedKeys = useEditorStore((s) => s.editedKeys);
@@ -311,7 +313,10 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
           */}
           <div className="pb-1">
             {job ? (
-              <ScoreCard report={report} breakdown={breakdown} detail={false} />
+              <>
+                <ScoreCard report={report} breakdown={breakdown} detail={false} />
+                <CeilingLine ceiling={ceiling} />
+              </>
             ) : (
               <NoPosting onAdd={() => store.setTailorOpen(true)} />
             )}

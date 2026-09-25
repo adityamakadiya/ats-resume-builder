@@ -43,6 +43,7 @@ import {
 import type { ResumeDoc } from "@ats/templates";
 import { addSkillOps, applyDocPatch, invertDocPatch, tailoredOf, validateDocOps } from "@/lib/editor/doc";
 import type { EditorRun } from "@/lib/editor/fixtures";
+import { ceilingFor, type Ceiling } from "@/lib/editor/ceiling";
 
 enableMapSet();
 
@@ -119,6 +120,14 @@ export type EditorState = {
   doc: ResumeDoc;
   report: AtsReport | null;
   breakdown: ScoreBreakdownV2 | null;
+  /*
+    Where honest edits alone would land. Recomputed on the moments that
+    change what is restorable - arriving, a tailor run, applying a
+    suggestion - and deliberately NOT on every keystroke: it costs ~30ms,
+    and typing prose changes the score, not the set of lines available to
+    put back.
+  */
+  ceiling: Ceiling | null;
   /** The score before the last mutation, so the delta pill has something to say. */
   /** The score before the last change, so a delta can be shown. Null when
    *  there was no score to move from. */
@@ -351,6 +360,7 @@ export const useEditorStore = create<EditorStore>()(
     doc: EMPTY_DOC,
     report: null,
     breakdown: breakdownOf(EMPTY_JOB, EMPTY_FACTS, EMPTY_DOC),
+    ceiling: null,
     previousOverall: null,
     truth: { passed: true, error_count: 0, warning_count: 0, violations: [] },
     gaps: {
@@ -398,6 +408,7 @@ export const useEditorStore = create<EditorStore>()(
         state.gaps = run.gaps;
         state.report = run.report;
         state.breakdown = breakdownOf(run.job, run.facts, run.doc);
+        state.ceiling = ceilingFor(run.job, run.facts, run.doc, run.report, run.gaps);
         state.previousOverall = run.report?.overall ?? null;
         state.pendingPatches = [];
         state.editedKeys = new Set<string>();
@@ -440,6 +451,10 @@ export const useEditorStore = create<EditorStore>()(
         */
         const keys = kind === "missing" ? [`asserted:${term}`] : [];
         mutate(state, ops, kind === "missing" ? `Asserted ${term}` : `Restored ${term}`, keys);
+        // Taking a suggestion is exactly the thing that changes how much
+        // honest headroom is left, so this is one of the three moments the
+        // ceiling is worth its 30ms.
+        state.ceiling = ceilingFor(state.job, state.facts, state.doc, state.report, state.gaps);
       }),
 
     /* -------------------------------------------------------- patches -- */
@@ -566,6 +581,7 @@ export const useEditorStore = create<EditorStore>()(
         state.previousOverall = before;
         state.report = scoreOf(state.job, state.facts, doc);
         state.breakdown = breakdownOf(state.job, state.facts, doc);
+        state.ceiling = ceilingFor(state.job, state.facts, doc, state.report, state.gaps);
 
         /*
           A tailoring run is a new document rather than an edit to the old
