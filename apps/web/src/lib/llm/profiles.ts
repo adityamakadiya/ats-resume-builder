@@ -24,7 +24,7 @@
  * against it. Do not quote them at anyone.
  */
 
-export type Step = "extract" | "analyze" | "gaps" | "tailor" | "strategy" | "chat" | "rewrite";
+export type Step = "extract" | "analyze" | "gaps" | "tailor" | "strategy" | "chat" | "rewrite" | "evidence";
 
 export type Effort = "minimal" | "low" | "medium" | "high";
 
@@ -75,6 +75,7 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     // only one someone waits on with the cursor still in the document, so
     // it is small and low effort in every profile.
     rewrite: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
+    evidence: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
   },
   balanced: {
     extract: { model: SMALL, effort: "medium", maxOutputTokens: 16_000 },
@@ -86,6 +87,7 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     strategy: { model: SMALL, effort: "low", maxOutputTokens: 8_000 },
     chat: { model: LARGE, effort: "low", maxOutputTokens: 8_000 },
     rewrite: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
+    evidence: { model: SMALL, effort: "low", maxOutputTokens: 1_500 },
   },
   thorough: {
     extract: { model: LARGE, effort: "medium", maxOutputTokens: 16_000 },
@@ -95,6 +97,7 @@ export const PROFILES: Record<ProfileName, Record<Step, StepConfig>> = {
     strategy: { model: LARGE, effort: "medium", maxOutputTokens: 8_000 },
     chat: { model: LARGE, effort: "medium", maxOutputTokens: 8_000 },
     rewrite: { model: LARGE, effort: "low", maxOutputTokens: 1_500 },
+    evidence: { model: LARGE, effort: "low", maxOutputTokens: 1_500 },
   },
 };
 

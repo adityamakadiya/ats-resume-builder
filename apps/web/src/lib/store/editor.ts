@@ -199,6 +199,15 @@ export type EditorActions = {
    * Returns the fact key so the caller can persist it.
    */
   attestFact: (input: { groupId: string; text: string }) => string | null;
+  /**
+   * Attest a line and put it in the document in one step.
+   *
+   * `attestFact` alone only makes a line available, which is right when the
+   * user is browsing suggestions and wrong here: they have just read the
+   * sentence and pressed "add it to my resume". Two steps would mean
+   * pressing that and watching nothing appear.
+   */
+  attestAndPlace: (input: { groupId: string; text: string }) => string | null;
 
   stagePatch: (patch: { ops: Op[]; rationale: string; origin?: PatchOrigin; id?: string }) => string | null;
   acceptPatch: (id: string) => void;
@@ -497,6 +506,46 @@ export const useEditorStore = create<EditorStore>()(
           "recoverable" as far as the scorer is concerned.
         */
         rescore(state);
+        state.ceiling = ceilingFor(state.job, state.facts, state.doc, state.report, state.gaps);
+      });
+
+      return key;
+    },
+
+    attestAndPlace: ({ groupId, text }) => {
+      const key = get().attestFact({ groupId, text });
+      if (!key) return null;
+
+      set((state) => {
+        const expIndex = state.doc.experience.findIndex((e) => e.source_id === groupId);
+        const projIndex = state.doc.projects.findIndex((p) => p.source_id === groupId);
+
+        const section = expIndex >= 0 ? "experience" : projIndex >= 0 ? "projects" : null;
+        const index = expIndex >= 0 ? expIndex : projIndex;
+        if (!section) return;
+
+        /*
+          Appended rather than led with. The first bullet of a role is the
+          most valuable line in the document and it is already carrying
+          whatever the rewrite judged strongest; dropping an attested line
+          above it would demote real evidence in favour of a claim.
+        */
+        const at = state.doc[section][index]!.bullets.length;
+        mutate(
+          state,
+          [
+            {
+              op: "add",
+              path: `/${section}/${index}/bullets/${at}`,
+              value: { text, source_ids: [key], keywords: [] },
+            },
+          ],
+          `Added what you told us about`,
+          // Not a hand edit: it is attested, and `isAttested` already keeps
+          // it out of the traced count. Marking it here as well would
+          // penalise the same line twice on the provenance badge.
+          [],
+        );
         state.ceiling = ceilingFor(state.job, state.facts, state.doc, state.report, state.gaps);
       });
 

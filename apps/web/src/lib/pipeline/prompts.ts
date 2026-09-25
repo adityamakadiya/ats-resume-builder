@@ -18,7 +18,15 @@
  * results in backend/evals.
  */
 
-export type PromptId = "extract" | "jd" | "gaps" | "tailor" | "strategy" | "chat" | "rewrite";
+export type PromptId =
+  | "extract"
+  | "jd"
+  | "gaps"
+  | "tailor"
+  | "strategy"
+  | "chat"
+  | "rewrite"
+  | "evidence";
 
 export type Prompt = {
   id: PromptId;
@@ -215,6 +223,33 @@ Return:
 - note: one short sentence on what you did, or why you could not.`,
 );
 
+export const EVIDENCE = prompt(
+  "evidence",
+  "1.0.0",
+  `You turn something a candidate tells you into one resume bullet. Nothing else.
+
+They have just said they used a technology that their resume never mentions, and roughly what they did with it. Your job is to write that as a line a resume would carry, in their role, about their work.
+
+THE RULE THAT OVERRIDES EVERYTHING: everything in the line must come from what the candidate just told you. You may make their words into a sentence. You may not add a number, a scale, a second technology, a team size, a duration, an outcome or a customer that they did not mention. If they gave you four words, you return a short line; padding it with plausible detail is inventing their work for them, and they are the one who has to defend it in the room.
+
+They are also not here to be interviewed. Do not ask for more. Write the best honest line their words support.
+
+Shape: <strong verb> <what they did with it> <the mechanism, if they named one> <what it was for or what changed, if they said>.
+
+- Start with what they did, never with "Helped", "Assisted", "Participated", "Worked on", "Responsible for", "Spearheaded", "Leveraged", "Utilised" or "Utilized".
+- Name the technology exactly as the posting spells it.
+- One line. Two at the absolute most.
+- No metric unless they gave you one. Never write "significantly", "substantially" or "greatly" in place of a number they did not provide.
+- No adjectives about the candidate.
+- ASCII punctuation only. Never an em dash or an en dash. Straight quotes only.
+- Write it in the register of the other bullets you are shown, so it does not read as pasted in from somewhere else.
+
+Return:
+- text: the bullet.
+- confident: false if their note was too thin to make a line worth putting on a resume, in which case text is your best attempt anyway and note says what would make it stronger.
+- note: one short sentence, addressed to the candidate, on what you did or what is missing.`,
+);
+
 export const STRATEGY = prompt(
   "strategy",
   "1.0.0",
@@ -236,6 +271,7 @@ export const PROMPTS: Record<PromptId, Prompt> = {
   gaps: GAP_ANALYSIS,
   tailor: TAILOR,
   rewrite: REWRITE,
+  evidence: EVIDENCE,
   strategy: STRATEGY,
   // The chat agent's prompt lives with the chat route, because it is the one
   // prompt whose content depends on a tool definition rather than a schema.

@@ -30,12 +30,14 @@ import { useEditorStore } from "@/lib/store/editor";
 import { KeywordGapPanel } from "./KeywordGapPanel";
 
 export type SuggestionChipsProps = {
+  /** Passed through to the keyword panel for terms with no line behind them. */
+  onAttest?: (term: string) => void;
   report: AtsReport | null;
   doc: ResumeDoc;
   onAdd: (term: string, kind: "recoverable" | "missing") => void;
 };
 
-export function SuggestionChips({ report, doc, onAdd }: SuggestionChipsProps) {
+export function SuggestionChips({ report, doc, onAdd, onAttest }: SuggestionChipsProps) {
   /*
     The posting, the facts and the gap analysis come from the store rather
     than from props. They are the same three values the score is already a
@@ -57,6 +59,7 @@ export function SuggestionChips({ report, doc, onAdd }: SuggestionChipsProps) {
 
   return (
     <KeywordGapPanel
+      onAttest={onAttest}
       job={job}
       facts={facts}
       doc={doc}

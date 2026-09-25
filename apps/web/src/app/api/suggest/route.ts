@@ -59,8 +59,23 @@ const ReplySchema = z.object({
   note: z.string().default(""),
 });
 
-/** The line, put back where it came from, for the guard to check in place. */
-function withLine(tailored: TailoredResume, path: string, text: string): TailoredResume | null {
+/**
+ * The line, put back where it came from, for the guard to check in place.
+ *
+ * The citations go back with it, and that is not a detail. This originally
+ * replaced only the text and left the bullet's original source_ids, so a
+ * rewrite that legitimately drew on a different fact was checked against
+ * the wrong one and refused: the guard saw a technology the cited fact did
+ * not contain and called it unsourced. Correct behaviour on a false
+ * premise. It made the panel refuse most real rewrites and say the model
+ * had invented something when it had not.
+ */
+function withLine(
+  tailored: TailoredResume,
+  path: string,
+  text: string,
+  sourceIds: string[],
+): TailoredResume | null {
   const parts = path.split("/").filter(Boolean);
   // /experience/0/bullets/2/text  or  /summary/text
   const clone = structuredClone(tailored) as unknown as Record<string, unknown>;
@@ -72,7 +87,18 @@ function withLine(tailored: TailoredResume, path: string, text: string): Tailore
   }
   if (node === null || typeof node !== "object") return null;
 
-  (node as Record<string, unknown>)[parts[parts.length - 1]!] = text;
+  const holder = node as Record<string, unknown>;
+  holder[parts[parts.length - 1]!] = text;
+
+  /*
+    Only when the model cited something. An empty list would strip the
+    line's existing provenance and turn a rewrite into an untraced claim,
+    which is the opposite of the point.
+  */
+  if (sourceIds.length > 0 && Array.isArray(holder.source_ids)) {
+    holder.source_ids = sourceIds;
+  }
+
   return clone as unknown as TailoredResume;
 }
 
@@ -149,7 +175,7 @@ export async function POST(request: Request) {
   */
   const cited = proposed.source_ids.filter((id) => allowedIds.includes(id));
 
-  const candidate = withLine(tailored as TailoredResume, path, proposed.text);
+  const candidate = withLine(tailored as TailoredResume, path, proposed.text, cited);
   if (!candidate) {
     return refuse(
       "That line could not be placed back into the document.",
@@ -183,7 +209,9 @@ export async function POST(request: Request) {
       text,
       refused: true,
       note:
-        "A stronger version was written and it claimed something your resume does not say, so it was thrown away. The line stands as it is.",
+        offending[0]?.offending
+          ? `A stronger version was written, but it claimed "${offending[0].offending}", which your resume does not say. It was thrown away and the line stands as it is.`
+          : "A stronger version was written and it claimed something your resume does not say, so it was thrown away. The line stands as it is.",
       violations: offending.map((v) => ({ code: v.code, detail: v.detail })),
     });
   }

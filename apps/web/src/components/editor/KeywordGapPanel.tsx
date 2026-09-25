@@ -45,6 +45,8 @@ export type KeywordGapPanelProps = {
   gaps: GapAnalysis | null;
   /** Apply one placement of one suggestion. The panel never mutates anything. */
   onApply: (suggestion: Suggestion, placement: Placement) => void;
+  /** Opens the "where did you use this" flow for a term with no line behind it. */
+  onAttest?: (term: string) => void;
 };
 
 /* ---------------------------------------------------------------- bits -- */
@@ -86,9 +88,12 @@ function Weight({ weight }: { weight: number }) {
 function Row({
   suggestion,
   onApply,
+  onAttest,
 }: {
   suggestion: Suggestion;
   onApply: (suggestion: Suggestion, placement: Placement) => void;
+  /** For a term the resume never had: ask where they used it. */
+  onAttest?: (term: string) => void;
 }) {
   const recoverable = suggestion.kind === "recoverable";
   const [primary, ...rest] = suggestion.placements;
@@ -147,6 +152,26 @@ function Row({
         )}
       </p>
 
+      {/*
+        The better offer for a term the resume never had.
+
+        A skills-list add is one word with nothing behind it, and the
+        scorer now says so: it is worth about half what the same term is
+        worth inside a bullet. Saying where they used it produces a line,
+        which is worth the full amount and is the thing a screener reads.
+        Offered beside the cheap option rather than instead of it, because
+        somebody in a hurry is entitled to the cheap one.
+      */}
+      {!recoverable && onAttest && (
+        <button
+          type="button"
+          onClick={() => onAttest(suggestion.term)}
+          className="mt-1 ml-0.5 text-[0.6875rem] text-stamp underline underline-offset-2 hover:text-ink"
+        >
+          I have used {suggestion.term} - write me the line
+        </button>
+      )}
+
       {rest.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1 pl-0.5">
           {rest.map((placement, i) => (
@@ -174,11 +199,13 @@ function Group({
   note,
   suggestions,
   onApply,
+  onAttest,
 }: {
   title: string;
   note: string;
   suggestions: Suggestion[];
   onApply: (suggestion: Suggestion, placement: Placement) => void;
+  onAttest?: (term: string) => void;
 }) {
   if (suggestions.length === 0) return null;
   return (
@@ -192,7 +219,12 @@ function Group({
       </h3>
       <ul className="mt-1">
         {suggestions.map((suggestion) => (
-          <Row key={suggestion.term} suggestion={suggestion} onApply={onApply} />
+          <Row
+            key={suggestion.term}
+            suggestion={suggestion}
+            onApply={onApply}
+            onAttest={onAttest}
+          />
         ))}
       </ul>
     </div>
@@ -208,6 +240,7 @@ export function KeywordGapPanel({
   report,
   gaps,
   onApply,
+  onAttest,
 }: KeywordGapPanelProps) {
   /*
     Every figure on this panel is `computeAtsReport` run against a copy of the
@@ -272,12 +305,14 @@ export function KeywordGapPanel({
         note="the posting states these as must-haves"
         suggestions={required}
         onApply={onApply}
+        onAttest={onAttest}
       />
       <Group
         title="Preferred"
         note="nice to have, or named only in passing"
         suggestions={preferred}
         onApply={onApply}
+        onAttest={onAttest}
       />
 
       {blocking.length > 0 && (

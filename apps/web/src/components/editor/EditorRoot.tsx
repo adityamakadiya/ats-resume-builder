@@ -350,6 +350,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
                 job={job}
                 gaps={gaps}
                 onAddKeyword={store.addSuggestion}
+                onAttest={(term) => setAttesting({ term })}
                 /*
                   No edited key. The provenance badge marks a hand edit as
                   something the guard did not check, and that is the whole
@@ -515,7 +516,7 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         facts={facts}
         onClose={() => setAttesting(null)}
         onAttest={({ groupId, text }) => {
-          const factKey = store.attestFact({ groupId, text });
+          const factKey = store.attestAndPlace({ groupId, text });
           if (!factKey || !sourceDocumentId) return;
           /*
             Fire and forget. The fact is already live in the editor, so a

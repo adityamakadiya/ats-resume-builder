@@ -33,6 +33,7 @@ export function SuggestionsPanel({
   gaps,
   onAddKeyword,
   onApply,
+  onAttest,
 }: {
   report: AtsReport | null;
   doc: ResumeDoc;
@@ -41,6 +42,8 @@ export function SuggestionsPanel({
   gaps: GapAnalysis;
   onAddKeyword: (term: string, kind: "recoverable" | "missing") => void;
   onApply: (ops: Op[], label: string, path: string) => void;
+  /** "I have used this" on a term with nothing behind it. */
+  onAttest?: (term: string) => void;
 }) {
   /*
     Recomputed on every document change, and that is affordable because
@@ -76,7 +79,7 @@ export function SuggestionsPanel({
         hidden={tab !== "keywords"}
         className="pt-2"
       >
-        <SuggestionChips report={report} doc={doc} onAdd={onAddKeyword} />
+        <SuggestionChips report={report} doc={doc} onAdd={onAddKeyword} onAttest={onAttest} />
       </div>
 
       <div
