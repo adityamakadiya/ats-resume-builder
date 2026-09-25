@@ -561,15 +561,17 @@ export function TailorPanel({ open, onClose }: { open: boolean; onClose: () => v
                 )}
               </div>
 
+              {/*
+                A statement, not a link. It used to open the refusal dialog,
+                which no longer exists; the refusals are in the rail behind
+                this panel, which is where the user is about to be anyway.
+              */}
               {outcome.violations > 0 && (
-                <button
-                  type="button"
-                  onClick={() => useEditorStore.getState().openUnverifiable()}
-                  className="mt-3 text-[0.8125rem] text-stamp underline underline-offset-4 hover:text-ink"
-                >
+                <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-muted">
                   {outcome.violations} {outcome.violations === 1 ? "line was" : "lines were"}{" "}
-                  refused. See why
-                </button>
+                  refused for not being traceable to your resume. They are listed under
+                  Refused lines, beside the document.
+                </p>
               )}
 
               {!outcome.persisted && (

@@ -134,7 +134,6 @@ export type EditorState = {
   lastError: string | null;
 
   /* the refusal dialog */
-  unverifiableOpen: boolean;
   /** Violations the user has explicitly dropped, by index into `truth`. */
   droppedViolations: number[];
 
@@ -203,8 +202,6 @@ export type EditorActions = {
   /** `before` is null when this run produced the first score. */
   loadTailored: (run: TailoredRun) => { before: number | null; after: number };
 
-  openUnverifiable: () => void;
-  closeUnverifiable: () => void;
   dropViolation: (index: number) => void;
 
   /* chat */
@@ -375,7 +372,6 @@ export const useEditorStore = create<EditorStore>()(
     saveState: { kind: "loading" },
     lastError: null,
 
-    unverifiableOpen: false,
     droppedViolations: [],
 
     messages: [],
@@ -409,20 +405,12 @@ export const useEditorStore = create<EditorStore>()(
         state.droppedViolations = [];
         state.saveState = run.saved ? { kind: "clean" } : { kind: "sample" };
         /*
-          Opening the editor does NOT open the refusal dialog.
-
-          It used to, on the reasoning that a refusal is the first thing
-          worth seeing. That is true the moment a rewrite produces one,
-          which is why loadTailored still opens it. It is not true on
-          arrival: a document carries its refusals with it, so every visit
-          to a resume that has ever had one was met by a modal about a
-          decision taken on some earlier visit, before the user had even
-          seen the page they came for.
-
-          The provenance block already says "N lines refused. See why" and
-          it is a link. Discoverable, not interrupting.
+          There is no refusal dialog any more. It opened itself after every
+          run and stacked three labelled blocks per refusal, so the one
+          feature that is this product's whole argument was delivered as a
+          wall the user closed without reading. Refusals live in the rail
+          now, next to the document they are about. See RefusedLines.
         */
-        state.unverifiableOpen = false;
         state.messages = [];
         state.steps = {};
       }),
@@ -574,7 +562,6 @@ export const useEditorStore = create<EditorStore>()(
         state.gaps = run.gaps;
         state.truth = run.truth;
         state.droppedViolations = [];
-        state.unverifiableOpen = !run.truth.passed && run.truth.violations.length > 0;
 
         state.previousOverall = before;
         state.report = scoreOf(state.job, state.facts, doc);
@@ -604,23 +591,9 @@ export const useEditorStore = create<EditorStore>()(
 
     /* ---------------------------------------------------- the refusal -- */
 
-    openUnverifiable: () =>
-      set((state) => {
-        state.unverifiableOpen = true;
-      }),
-
-    closeUnverifiable: () =>
-      set((state) => {
-        state.unverifiableOpen = false;
-      }),
-
     dropViolation: (index) =>
       set((state) => {
         if (!state.droppedViolations.includes(index)) state.droppedViolations.push(index);
-        const remaining = state.truth.violations.filter(
-          (_v, i) => !state.droppedViolations.includes(i),
-        );
-        if (remaining.length === 0) state.unverifiableOpen = false;
       }),
 
     /* ----------------------------------------------------------- chat -- */
@@ -659,7 +632,6 @@ export const useEditorStore = create<EditorStore>()(
       set((state) => {
         state.truth = truth;
         state.droppedViolations = [];
-        state.unverifiableOpen = !truth.passed && truth.violations.length > 0;
       }),
   })),
 );

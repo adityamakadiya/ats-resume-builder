@@ -41,9 +41,24 @@ function Bar({ label, value, hint }: { label: string; value: number; hint: strin
 export function ScoreCard({
   report,
   breakdown,
+  /*
+    The verdict and its evidence are drawn separately now.
+
+    The whole card is sticky at the top of the rail, and the five bars made
+    it tall enough to push the form off a 900px screen: the document opened
+    below the fold, which for the one surface in that column a person edits
+    all session is the wrong thing to hide. The number answers "am I in the
+    running"; the bars answer "why", which is the question people ask
+    second and not every time.
+
+    So: `detail={false}` up top, and the bars inside the "Why this score"
+    fold with the rest of the explanation.
+  */
+  detail = true,
 }: {
   report: AtsReport | null;
   breakdown: ScoreBreakdownV2 | null;
+  detail?: boolean;
 }) {
   /*
     No posting, no score, and no number on the screen.
@@ -112,6 +127,47 @@ export function ScoreCard({
         Computed here from the posting, not fetched. It moves as you type.
       </p>
 
+      {detail && <ScoreBars breakdown={breakdown} />}
+    </section>
+  );
+}
+
+/**
+ * What the score panel says before there is anything to score against.
+ *
+ * An invitation rather than a placeholder: it names the one action that
+ * turns this panel on, and says what the number will mean when it arrives.
+ */
+function NoPosting() {
+  return (
+    <section aria-label="Score">
+      <p className="label">ATS score</p>
+      <p className="mt-2 text-[1.75rem] leading-none font-semibold text-ink-faint">
+        Not yet
+      </p>
+      <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-muted">
+        A score is a comparison, so it needs the posting you are aiming at.
+        Add one and this fills in, then moves as you type.
+      </p>
+    </section>
+  );
+}
+
+
+/**
+ * The five dimensions behind the number, and what padding cost.
+ *
+ * Separate from the headline because they answer a different question and
+ * get asked at a different time. The number is "am I in the running" and
+ * belongs in the sticky header; these are "why", which is asked second,
+ * sometimes, and is not worth the vertical space it was taking above the
+ * form on every load.
+ */
+export function ScoreBars({ breakdown }: { breakdown: ScoreBreakdownV2 | null }) {
+  if (!breakdown) return null;
+
+  return (
+    <div>
       <div className="mt-4 space-y-2.5">
         <Bar
           label="Keyword coverage"
@@ -148,27 +204,6 @@ export function ScoreCard({
           </span>
         </p>
       )}
-    </section>
-  );
-}
-
-/**
- * What the score panel says before there is anything to score against.
- *
- * An invitation rather than a placeholder: it names the one action that
- * turns this panel on, and says what the number will mean when it arrives.
- */
-function NoPosting() {
-  return (
-    <section aria-label="Score">
-      <p className="label">ATS score</p>
-      <p className="mt-2 text-[1.75rem] leading-none font-semibold text-ink-faint">
-        Not yet
-      </p>
-      <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-muted">
-        A score is a comparison, so it needs the posting you are aiming at.
-        Add one and this fills in, then moves as you type.
-      </p>
-    </section>
+    </div>
   );
 }

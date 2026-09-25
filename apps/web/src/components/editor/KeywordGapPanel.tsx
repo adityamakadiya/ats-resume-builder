@@ -232,21 +232,39 @@ export function KeywordGapPanel({
         Terms the posting wants
       </h2>
 
+      {/*
+        The legend is a disclosure now. As three always-on paragraphs it was
+        about four lines of prose between the heading and the first thing
+        anybody could click, and it pushed the form below the fold: measured
+        at y=1108 in a 900px viewport, so the document was off screen on
+        arrival on a laptop.
+
+        It is read once and true forever, which is exactly the content that
+        should be available rather than present. The colours still carry the
+        meaning on their own, and the one-line summary names it.
+      */}
       {suggestions.length > 0 && (
-        <div className="mt-1.5 space-y-0.5">
-          <p className="text-[0.75rem] leading-snug text-traced">
-            Green is already yours. Your resume claims it, the rewrite dropped it, and
-            putting it back stays traced to your resume.
-          </p>
-          <p className="text-[0.75rem] leading-snug text-caution">
-            Amber is not in your resume. Adding one is your own assertion and the guard
-            never checked it. It counts as a hand edit.
-          </p>
-          <p className="text-[0.6875rem] leading-snug text-ink-faint">
-            Points are what the score does when the term lands, computed against this
-            document, not estimated.
-          </p>
-        </div>
+        <details className="mt-1.5">
+          <summary className="cursor-pointer list-none text-[0.75rem] leading-snug text-ink-faint select-none hover:text-ink-muted">
+            <span className="text-traced">Green</span> is already yours,{" "}
+            <span className="text-caution">amber</span> is your own claim.{" "}
+            <span className="underline underline-offset-2">What that means</span>
+          </summary>
+          <div className="mt-1.5 space-y-0.5">
+            <p className="text-[0.75rem] leading-snug text-traced">
+              Green is already yours. Your resume claims it, the rewrite dropped it, and
+              putting it back stays traced to your resume.
+            </p>
+            <p className="text-[0.75rem] leading-snug text-caution">
+              Amber is not in your resume. Adding one is your own assertion and the guard
+              never checked it. It counts as a hand edit.
+            </p>
+            <p className="text-[0.6875rem] leading-snug text-ink-faint">
+              Points are what the score does when the term lands, computed against this
+              document, not estimated.
+            </p>
+          </div>
+        </details>
       )}
 
       <Group

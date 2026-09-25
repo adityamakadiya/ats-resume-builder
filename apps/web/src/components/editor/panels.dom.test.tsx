@@ -81,8 +81,21 @@ describe("TracedBadge", () => {
     expect(after).not.toMatch(/verified/i);
   });
 
-  it("offers the refusals when there are any", () => {
+  it("reports refusals without offering a route to a dialog that is gone", () => {
     render(<TracedBadge traced={10} total={12} editedCount={0} refusedCount={2} />);
-    expect(screen.getByRole("button", { name: /2 lines refused\. See why/ })).toBeTruthy();
+
+    // The count still has to be here: it is the number that says the
+    // document on screen is shorter than the rewrite wanted it to be.
+    // Scoped to its own sentence, because "2" also appears in "10 of 12".
+    const note = screen.getByText(/refused, listed above/i);
+    expect(note.textContent).toMatch(/\b2\b/);
+
+    /*
+      Not a button. This used to open the refusal dialog. The refusals are
+      a section higher up the same column now, so a link here would send
+      the reader backwards past what they were already shown, and a button
+      with no handler would do nothing at all.
+    */
+    expect(screen.queryByRole("button", { name: /refused/i })).toBeNull();
   });
 });

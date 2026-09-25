@@ -31,19 +31,52 @@ import {
 } from "@/lib/store/editor";
 import { FormPanel } from "./FormPanel";
 import { PreviewPane } from "./PreviewPane";
-import { ScoreCard } from "./ScoreCard";
+import { ScoreBars, ScoreCard } from "./ScoreCard";
+import { RefusedLines } from "./RefusedLines";
 import { SuggestionChips } from "./SuggestionChips";
 import { TailorPanel } from "./TailorPanel";
 import { Toolbar } from "./Toolbar";
 import { TracedBadge } from "./TracedBadge";
-import { UnverifiableDialog } from "./UnverifiableDialog";
 
-function Fold({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+/**
+ * A section of the rail, shut unless it is asked for.
+ *
+ * Closed by default is the whole point. Six analysis blocks were open at
+ * once above the form, so the document - the thing a person came to change,
+ * and the only part of this column they touch more than once - began about
+ * two screens down. Reading happens once; editing happens all afternoon.
+ *
+ * The count is on the summary so a shut section still reports whether it
+ * has anything in it, which is what makes shutting it safe.
+ */
+function Fold({
+  title,
+  count,
+  tone = "quiet",
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  count?: number;
+  tone?: "quiet" | "refused";
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <details className="border-t border-rule py-2.5">
+    <details open={defaultOpen} className="border-t border-rule py-2.5">
       <summary className="label flex cursor-pointer list-none items-center gap-2 select-none hover:text-ink">
-        {title}
-        {count !== undefined && <span className="font-mono tabular-nums">{count}</span>}
+        <span className={tone === "refused" ? "text-[color:var(--refused)]" : undefined}>
+          {title}
+        </span>
+        {count !== undefined && (
+          <span
+            className={`ml-auto font-mono tabular-nums ${
+              tone === "refused" ? "text-[color:var(--refused)]" : ""
+            }`}
+          >
+            {count}
+          </span>
+        )}
       </summary>
       <div className="mt-2 space-y-2 text-[0.8125rem] leading-snug text-ink-muted">{children}</div>
     </details>
@@ -163,7 +196,6 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
   const saveState: SaveState =
     storeSave.kind === "loading" ? (run.saved ? { kind: "clean" } : { kind: "sample" }) : storeSave;
   const lastError = useEditorStore((s) => s.lastError);
-  const unverifiableOpen = useEditorStore((s) => s.unverifiableOpen);
   const tailorOpen = useEditorStore((s) => s.tailorOpen);
   const truthViolations = useEditorStore((s) => s.truth.violations);
   const droppedViolations = useEditorStore((s) => s.droppedViolations);
@@ -256,42 +288,100 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
         <Panel className="lg:overflow-y-auto">
           <aside aria-label="Score and document" className="px-4 py-4">
           {/*
-            With no posting there is nothing to score against and nothing to
-            suggest, so neither panel is drawn. One prompt stands in their
-            place, carrying the single action that turns both of them on.
-            Two panels of empty state stacked above each other would read as
-            a product that is broken rather than one that is waiting.
-          */}
-          {job ? (
-            <ScoreCard report={report} breakdown={breakdown} />
-          ) : (
-            <NoPosting onAdd={() => store.setTailorOpen(true)} />
-          )}
+            ORDER OF THIS COLUMN, AND WHY.
 
-          <div className="mt-4">
-            <TracedBadge
-              traced={lines.traced}
-              total={lines.total}
-              editedCount={editedKeys.size}
-              refusedCount={violations.length}
-              onShowRefused={store.openUnverifiable}
-            />
+            The verdict, then the shortest route to changing it, then the
+            document, then everything that explains the verdict. It used to
+            be the other way round below the score: five analysis blocks,
+            all open, and the form under them.
+
+            That ordering answered "why is my score what it is" ahead of
+            "what do I do about it", and it buried the one surface in this
+            column the user touches repeatedly. Explanation is read once.
+            Editing is the session.
+          */}
+
+          {/*
+            Sticky, because the number is the reason the page exists and
+            scrolling to the form should not cost sight of it. The whole
+            point of an edit here is watching it move.
+          */}
+          <div className="sticky top-0 z-10 -mx-4 -mt-4 bg-paper-raised px-4 pt-4 pb-3">
+            {job ? (
+              <ScoreCard report={report} breakdown={breakdown} detail={false} />
+            ) : (
+              <NoPosting onAdd={() => store.setTailorOpen(true)} />
+            )}
           </div>
 
+          {/*
+            The only block that is open by default and not a fold. Every
+            item in it is a specific edit with a number attached, which
+            makes it the one part of the analysis that is an instruction
+            rather than a description.
+          */}
           {job && (
-            <div className="mt-4">
+            <div className="mt-1">
               <SuggestionChips report={report} doc={doc} onAdd={store.addSuggestion} />
             </div>
           )}
 
-          <div className="mt-4">
-            {gaps.recruiter_concerns.length > 0 && (
-              <Fold title="A screener will hesitate on" count={gaps.recruiter_concerns.length}>
-                <ul className="list-disc space-y-1 pl-4">
-                  {gaps.recruiter_concerns.map((concern, i) => (
-                    <li key={i}>{concern}</li>
+          {/*
+            Refusals rank above the rest of the analysis because they are
+            the only part of it that says something was removed from the
+            document the user is about to send.
+          */}
+          {violations.length > 0 && (
+            <div className="mt-4">
+              <Fold
+                title="Refused lines"
+                count={violations.length}
+                tone="refused"
+              >
+                <p className="mb-2 text-[0.75rem] leading-snug text-ink-faint">
+                  Rewrites we could not trace back to your resume, so we left them out
+                  rather than guess.
+                </p>
+                <RefusedLines violations={violations} onDrop={store.dropViolation} />
+              </Fold>
+            </div>
+          )}
+
+          {/* The document, above the explanations rather than below them. */}
+          <div className="mt-5 border-t border-rule pt-3">
+            <h2 className="label">The document</h2>
+            <div className="mt-2">
+              <FormPanel
+                doc={doc}
+                editedKeys={editedKeys}
+                onEdit={store.editField}
+                onOps={(ops, label, keys) => store.applyUserOps(ops, label, keys)}
+              />
+            </div>
+          </div>
+
+          {/*
+            WHY THESE ARE LAST, AND SHUT.
+
+            Each one explains the score rather than changing it. They were
+            open and above the form, so the column opened on five blocks of
+            prose and the user scrolled past all of them to reach the thing
+            they came to edit - every time, for the whole session.
+
+            Shut and underneath, they are still one click away and their
+            counts are still visible, which is the part that matters: you
+            can see there are six gaps without reading six gaps.
+          */}
+          <div className="mt-5">
+            {report && report.recommendations.length > 0 && (
+              <Fold title="Why this score" count={report.recommendations.length}>
+                {/* The five dimensions, out of the sticky header. */}
+                <ScoreBars breakdown={breakdown} />
+                <ol className="mt-3 list-decimal space-y-1 pl-4">
+                  {report.recommendations.map((rec, i) => (
+                    <li key={i}>{rec}</li>
                   ))}
-                </ul>
+                </ol>
               </Fold>
             )}
 
@@ -312,13 +402,13 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
               </Fold>
             )}
 
-            {report && report.recommendations.length > 0 && (
-              <Fold title="What to do next" count={report.recommendations.length}>
-                <ol className="list-decimal space-y-1 pl-4">
-                  {report.recommendations.map((rec, i) => (
-                    <li key={i}>{rec}</li>
+            {gaps.recruiter_concerns.length > 0 && (
+              <Fold title="A screener will hesitate on" count={gaps.recruiter_concerns.length}>
+                <ul className="list-disc space-y-1 pl-4">
+                  {gaps.recruiter_concerns.map((concern, i) => (
+                    <li key={i}>{concern}</li>
                   ))}
-                </ol>
+                </ul>
               </Fold>
             )}
 
@@ -331,18 +421,15 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
                 </ul>
               </Fold>
             )}
-          </div>
 
-          <div className="mt-5 border-t border-rule pt-3">
-            <h2 className="label">The document</h2>
-            <div className="mt-2">
-              <FormPanel
-                doc={doc}
-                editedKeys={editedKeys}
-                onEdit={store.editField}
-                onOps={(ops, label, keys) => store.applyUserOps(ops, label, keys)}
+            <Fold title="Provenance" count={lines.traced}>
+              <TracedBadge
+                traced={lines.traced}
+                total={lines.total}
+                editedCount={editedKeys.size}
+                refusedCount={violations.length}
               />
-            </div>
+            </Fold>
           </div>
           </aside>
         </Panel>
@@ -385,14 +472,6 @@ export function EditorRoot({ run, sourceFile }: { run: EditorRun; sourceFile: st
 
       <TailorPanel open={tailorOpen} onClose={() => store.setTailorOpen(false)} />
 
-      <UnverifiableDialog
-        open={unverifiableOpen}
-        violations={violations}
-        doc={doc}
-        facts={facts}
-        onClose={store.closeUnverifiable}
-        onDrop={store.dropViolation}
-      />
     </div>
   );
 }

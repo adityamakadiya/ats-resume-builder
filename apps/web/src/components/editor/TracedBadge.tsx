@@ -21,7 +21,6 @@ export type TracedBadgeProps = {
   total: number;
   editedCount: number;
   refusedCount: number;
-  onShowRefused?: () => void;
 };
 
 export function TracedBadge({
@@ -29,17 +28,18 @@ export function TracedBadge({
   total,
   editedCount,
   refusedCount,
-  onShowRefused,
 }: TracedBadgeProps) {
   const lines = (n: number) => (n === 1 ? "line" : "lines");
 
   return (
-    <section aria-labelledby="traced-heading" className="border-t border-rule pt-3">
-      <h2 id="traced-heading" className="label">
-        Provenance
-      </h2>
-
-      <p className="mt-1.5 text-[0.8125rem] leading-snug">
+    /*
+      No heading and no rule of its own: this sits inside a fold that
+      already provides both, and two "Provenance" headings one above the
+      other is what you get when a component is moved without being looked
+      at.
+    */
+    <section aria-label="Provenance detail">
+      <p className="mt-0.5 text-[0.8125rem] leading-snug">
         <span className="font-mono tabular-nums text-traced">{traced}</span>
         <span className="text-ink-muted">
           {" "}
@@ -63,14 +63,19 @@ export function TracedBadge({
         </p>
       )}
 
+      {/*
+        A statement rather than a link. It used to open the refusal dialog;
+        the refusals now have their own section higher up this column, so
+        pointing at one from down here would be sending the reader
+        backwards past the thing they were already shown.
+      */}
       {refusedCount > 0 && (
-        <button
-          type="button"
-          onClick={onShowRefused}
-          className="mt-2 inline-flex items-center gap-1.5 text-[0.8125rem] text-stamp underline underline-offset-4 hover:text-ink"
-        >
-          {refusedCount} {lines(refusedCount)} refused. See why
-        </button>
+        <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-muted">
+          <span className="font-mono tabular-nums text-[color:var(--refused)]">
+            {refusedCount}
+          </span>{" "}
+          {lines(refusedCount)} refused, listed above.
+        </p>
       )}
     </section>
   );
