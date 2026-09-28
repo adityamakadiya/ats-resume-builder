@@ -31,7 +31,14 @@ HTML_DIR = (
 )
 
 TEMPLATES = ("standard", "compact", "modern")
-FIXTURES = ("rich", "sparse", "long")
+FIXTURES = ("rich", "sparse", "long", "twopage", "threepage")
+
+# The two shapes that exist to print on more than one sheet, and how many
+# sheets each is tuned to take in every template. Before they existed, the
+# only multi-page evidence in this suite was "page two of `long` is not
+# blank", which a resume with a section heading stranded at the foot of page
+# two satisfies perfectly. See packages/templates/src/fixtures.ts.
+MULTIPAGE = {"twopage": 2, "threepage": 3}
 
 # Non-ASCII in extracted text means a curly quote, an em dash or a bullet glyph
 # reached the text layer. Each of those is a literal keyword-match failure in a
@@ -241,4 +248,226 @@ def test_a_skill_category_is_distinguishable_from_its_items(template):
     assert distinguishable, (
         f"{template}: a skill category renders identically to its items "
         f"({label}). A selector is not matching."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# More than one sheet of paper                                                 #
+# --------------------------------------------------------------------------- #
+#
+# Everything above this line is about a single page, or about page two merely
+# existing. That was the whole of the repository's multi-page evidence, and it
+# is not enough: Standard printed standard--long with SKILLS at the foot of
+# page two, "Languages: Go, Rust, Python, TypeScript, SQL, Bash" underneath it
+# and the other three groups overleaf, and every assertion in this file passed.
+#
+# The break geometry is asserted in e2e/tier3/rendered-html.spec.ts, which can
+# measure where each element landed. What that suite cannot see is the text
+# layer, which is the thing a parser reads and the thing a page break can
+# scramble: text is emitted page by page, so a break puts a hard boundary in
+# the middle of the stream, and a layout that reflows across it can deliver
+# the second half of a career before the first.
+
+#: The section headings as they reach the text layer. `text-transform:
+#: uppercase` is applied by the renderer and is baked into the glyphs, so the
+#: DOM says "Skills" and the PDF says "SKILLS".
+SECTION_HEADINGS = (
+    "SUMMARY",
+    "EXPERIENCE",
+    "SKILLS",
+    "PROJECTS",
+    "EDUCATION",
+    "CERTIFICATIONS",
+    "TALKS",
+    "PUBLICATIONS",
+    "OPEN SOURCE",
+)
+
+#: How many lines of its own section a heading has to bring onto its page.
+#:
+#: Three. "SKILLS" plus one group is one line, which is the defect; a heading
+#: plus a role is a dozen, which is obviously fine. The same number is used by
+#: the break-quality suite in e2e/tier3/rendered-html.spec.ts, and the two
+#: should move together if either moves.
+MIN_LINES_UNDER_A_HEADING = 3
+
+#: Employers in the order the document lists them, per multi-page fixture.
+#: An employer is a good probe because it is unique, it appears exactly once,
+#: and its position is the one thing a reader uses to date a career.
+EMPLOYERS = {
+    "twopage": (
+        "Pallavi Retail Group",
+        "Trailhead Mobility",
+        "Sarovar Analytics",
+        "Kalpataru Web Services",
+    ),
+    "threepage": (
+        "Kaveri Financial",
+        "Ellora Health Systems",
+        "Meghdoot Commerce",
+        "Chandan Media Networks",
+        "Dhruva Interactive Labs",
+        "Sahyadri Software Services",
+    ),
+}
+
+#: The main column's own running order in Modern.
+#:
+#: Modern is two columns, and the text layer proves what the registry warns
+#: about: the sidebar is emitted first, so SKILLS, EDUCATION and
+#: CERTIFICATIONS all arrive before SUMMARY. That is a property of the layout
+#: rather than of the page breaks, it is disclosed to the candidate at the
+#: point they choose the template, and asserting it away here would mean
+#: either failing forever or pretending the warning is unnecessary. What must
+#: still hold, and what these tests check, is that each column is internally
+#: in order and stays that way across every page turn.
+MODERN_MAIN_COLUMN = ("SUMMARY", "EXPERIENCE", "PROJECTS", "TALKS")
+MODERN_SIDEBAR = ("SKILLS", "EDUCATION", "CERTIFICATIONS")
+
+
+def _pages_of(pdf: bytes) -> list[str]:
+    doc = pymupdf.open(stream=pdf, filetype="pdf")
+    try:
+        return [page.get_text() for page in doc]
+    finally:
+        doc.close()
+
+
+def _positions(text: str, markers) -> list[tuple[int, str]]:
+    return [(text.find(m), m) for m in markers if text.find(m) != -1]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("template", "fixture"), [(t, f) for t in TEMPLATES for f in MULTIPAGE]
+)
+def test_a_multi_page_fixture_prints_the_pages_it_is_named_for(rendered, template, fixture):
+    """The fixtures are tuned, not guessed, and the tuning has to stay true.
+
+    `twopage` and `threepage` were sized so that all three templates print the
+    same number of sheets and fill the last one. If a metric shifts and the
+    count moves, the e2e break-quality assertions start measuring a document
+    of a different shape than the one they were written for, and they go quiet
+    rather than red. Retune the fixture in packages/templates/src/fixtures.ts;
+    do not edit this number.
+    """
+    pdf, _ = rendered[(template, fixture)]
+    pages = _pages_of(pdf)
+
+    assert len(pages) == MULTIPAGE[fixture], (
+        f"{template}/{fixture} printed {len(pages)} pages, not {MULTIPAGE[fixture]}"
+    )
+    for index, page in enumerate(pages, start=1):
+        assert page.strip(), f"{template}/{fixture} page {index} carries no text at all"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("template", "fixture"), [(t, f) for t in TEMPLATES for f in MULTIPAGE]
+)
+def test_a_career_reads_in_order_across_the_page_turn(rendered, template, fixture):
+    """Every employer once, in the order the document lists them.
+
+    The failure this names is specific. A page break splits the text stream,
+    and anything that reflows around it, a floated block, a grid row that
+    moves, a column that fills in a different order on the second sheet, can
+    deliver 2014 before 2022 or emit an employer on both sides of the break.
+    A recruiter would notice; a parser would not, and would build a career
+    history out of whatever order it got.
+    """
+    _, text = rendered[(template, fixture)]
+    employers = EMPLOYERS[fixture]
+
+    for employer in employers:
+        assert text.count(employer) == 1, (
+            f"{template}/{fixture} prints {employer!r} {text.count(employer)} times; "
+            "a page boundary has either duplicated it or lost it"
+        )
+
+    found = _positions(text, employers)
+    assert [name for _, name in found] == list(employers), (
+        f"{template}/{fixture} reads the career out of order: "
+        f"{[name for _, name in found]}"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("template", "fixture"), [(t, f) for t in TEMPLATES for f in MULTIPAGE]
+)
+def test_the_sections_read_in_order_across_the_page_turn(rendered, template, fixture):
+    """The same question for the section headings, one column at a time."""
+    _, text = rendered[(template, fixture)]
+
+    expected = [MODERN_MAIN_COLUMN, MODERN_SIDEBAR] if template == "modern" else [SECTION_HEADINGS]
+
+    for run in expected:
+        found = _positions(text, run)
+        assert len(found) >= 2, f"{template}/{fixture} has almost no headings to order"
+        assert [name for _, name in found] == [name for name in run if name in text], (
+            f"{template}/{fixture} reads its sections out of order: "
+            f"{[name for _, name in found]}"
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("template", "fixture"), [(t, f) for t in TEMPLATES for f in FIXTURES])
+def test_no_heading_is_stranded_at_the_foot_of_a_page(rendered, template, fixture):
+    """The defect, read straight out of the printed file.
+
+    Standard printed standard--long with SKILLS third from the bottom of page
+    two: the heading, then "Languages", then "Go, Rust, Python, TypeScript,
+    SQL, Bash", and the remaining three groups overleaf. Asserting only that
+    the heading is not the very last line misses it, which is worth saying
+    out loud because that is the test this one replaced and it passed against
+    the broken stylesheet.
+
+    So: a heading that does not finish its section on its own page has to
+    carry at least three lines of it there. A section that finishes on the
+    page is left alone however short it is, because a complete two-line
+    section at the foot of a page is not stranded, it is just short.
+
+    e2e/tier3 asserts the same thing against a model of Chromium's
+    pagination, which is faster and can point at the offending element. This
+    asserts it against the bytes a candidate downloads, which is slower and
+    blunter and cannot be argued with. If the two ever disagree, this one is
+    right.
+
+    Run over every fixture rather than only the multi-page pair, because the
+    original sighting was on `long`, which is not in that pair. A one-page
+    fixture passes trivially and costs nothing, since Chromium has already
+    printed it for the tests above.
+    """
+    pdf, _ = rendered[(template, fixture)]
+    pages = _pages_of(pdf)
+
+    # One flat stream of non-empty lines, each tagged with the sheet it was
+    # printed on. The page tag is the only thing the text layer knows about
+    # pagination, and it is all this needs.
+    stream: list[tuple[int, str]] = []
+    for number, page in enumerate(pages, start=1):
+        for line in page.splitlines():
+            if line.strip():
+                stream.append((number, line.strip()))
+
+    heads = [i for i, (_, line) in enumerate(stream) if line in SECTION_HEADINGS]
+
+    stranded = []
+    for position, index in enumerate(heads):
+        page, heading = stream[index]
+        end = heads[position + 1] if position + 1 < len(heads) else len(stream)
+        body = stream[index + 1 : end]
+        on_this_page = [line for number, line in body if number == page]
+
+        if len(on_this_page) == len(body):
+            continue  # the section finished where it started
+        if len(on_this_page) < MIN_LINES_UNDER_A_HEADING:
+            stranded.append(
+                f"{heading!r} on page {page} keeps only {len(on_this_page)} of its "
+                f"{len(body)} lines: {on_this_page}"
+            )
+
+    assert not stranded, (
+        f"{template}/{fixture} strands a heading at the foot of a page, which makes the "
+        f"reader turn over to find out what it was for: {stranded}"
     )

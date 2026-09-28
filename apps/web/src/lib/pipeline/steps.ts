@@ -38,6 +38,7 @@ import { configFor } from "../llm/profiles";
 import { structured, type Usage } from "../llm/structured";
 import { cacheKey, withCache, type CacheScope } from "./cache";
 import { PROMPTS, block } from "./prompts";
+import { isOverLength, linesPerDocument, trimPlan } from "./length";
 import { runGuard } from "./guard-client";
 
 export type StepTrace = {
@@ -176,6 +177,15 @@ export type TailorOutcome = {
    *  expensive step, so which rule keeps tripping is the difference between
    *  tuning the prompt and guessing at it. */
   firstDraftViolations: string[];
+  /** True when the draft was over the page budget and a trim was asked for.
+   *  Tracked separately from `repairAttempted` because the two are different
+   *  failures: one is the model inventing, the other is the model
+   *  overwriting, and a prompt fix for one does nothing for the other. */
+  lengthRepairAttempted: boolean;
+  /** Estimated pages at the tightest density rung, which is the length the
+   *  candidate will actually be printing. Fractional on purpose: 2.05 and 2.9
+   *  are different problems. See length.ts for the error bar. */
+  estimatedPages: number;
   traces: StepTrace[];
 };
 
@@ -207,9 +217,12 @@ export async function tailorResume(args: {
   rawResumeText: string;
   scope: CacheScope;
   signal?: AbortSignal;
-  onEvent?: (event: { type: "draft" | "verified" | "repairing" }) => void;
+  /** Pages the candidate is aiming at. Two unless they have said otherwise. */
+  maxPages?: number;
+  onEvent?: (event: { type: "draft" | "verified" | "repairing" | "trimming" }) => void;
 }): Promise<TailorOutcome> {
   const { job, facts, gaps, rawResumeText, scope, signal } = args;
+  const maxPages = args.maxPages ?? 2;
   const jdTerms = [
     ...job.requirements.map((r) => r.term),
     ...job.keywords.flatMap((k) => [k.term, ...k.variants]),
@@ -274,9 +287,110 @@ export async function tailorResume(args: {
     truth = await runGuard({ tailored, facts, rawResumeText, jdTerms, entailment: true });
   }
 
+  /* ------------------------------------------------------------ length  */
+
+  /*
+    The second failure mode, and until now the invisible one.
+
+    The prompt used to say "aim for one to two pages" and nothing ever
+    checked. The renderer did check, by refusing to print more than one page,
+    which is how a three page draft became a one page document with the
+    bottom missing. The prompt now carries a line budget it can count against
+    (see length.ts for where the number comes from), and this is the other
+    half of that: a measurement of what actually came back, so the instruction
+    is not the only thing standing between a candidate and a resume that does
+    not fit.
+
+    Two rules keep this from being expensive or destructive.
+
+    It measures at the tightest density rung, because fit.ts will spend four
+    rungs of type and margin before it gives up. A draft that overruns a
+    comfortable setting is not a problem worth a model call; a draft that
+    overruns 9pt at 0.45in margins is, because at that point the ladder is
+    exhausted and the only remaining lever is words. isOverLength() adds a
+    margin on top of that for the estimator's own error, on the principle
+    that cutting a bullet off a resume that would have fitted is the worse
+    mistake.
+
+    And it never runs after a truth repair. That would be a third call to the
+    most expensive step in the pipeline, and a model that has just been told
+    its figures were unverifiable is not the model to hand a second,
+    unrelated instruction to. A long but truthful resume is a far better
+    outcome than a short one nobody checked.
+  */
+  let lengthRepairAttempted = false;
+  let length = isOverLength(tailored, maxPages);
+
+  if (length.over && !repairAttempted) {
+    lengthRepairAttempted = true;
+    args.onEvent?.({ type: "trimming" });
+
+    // At the rung the measurement was taken on, so the two numbers agree.
+    const overBy = Math.ceil(length.estimate.lines - linesPerDocument(maxPages, 4));
+    const plan = trimPlan(length.estimate, overBy);
+
+    console.warn(
+      `[tailor] draft estimated at ${length.pages.toFixed(2)} pages against a ` +
+        `${maxPages} page budget, asking for a trim of about ${overBy} lines`,
+    );
+
+    const trimmed = await runStep<TailoredResume>({
+      step: "tailor",
+      promptVersion: PROMPTS.tailor.version,
+      system: PROMPTS.tailor.text,
+      user: [
+        brief,
+        `Your previous draft runs to about ${length.estimate.lines.toFixed(0)} lines, which is ` +
+          `roughly ${overBy} lines more than ${maxPages} page(s) hold.`,
+        "Return the same resume with that length taken out. Do not rewrite what " +
+          "you are keeping, and do not soften a line to shorten it: drop whole " +
+          "bullets, in this order.",
+        plan.map((step, i) => `${i + 1}. ${step}`).join("\n"),
+        "Keep the first bullet of the most recent role exactly as it is.",
+      ].join("\n\n"),
+      schema: TailoredResumeSchema,
+      schemaName: "TailoredResume",
+      scope,
+      signal,
+    });
+    traces.push(trimmed.trace);
+
+    const candidate = sanitize(trimmed.value);
+    const candidateTruth = await runGuard({
+      tailored: candidate,
+      facts,
+      rawResumeText,
+      jdTerms,
+      entailment: true,
+    });
+
+    // A trim is still a rewrite, so it is still capable of introducing a line
+    // that cannot be traced. If it did, the shorter draft is thrown away and
+    // the verified one is kept. Length is a preference; provenance is not,
+    // and this branch is only reachable when the longer draft passed.
+    if (candidateTruth.passed) {
+      tailored = candidate;
+      truth = candidateTruth;
+      length = isOverLength(tailored, maxPages);
+    } else {
+      console.warn(
+        "[tailor] the trimmed draft failed verification, keeping the longer verified one",
+      );
+    }
+  }
+
   // Computed, not asked of a model: free, instant, and the same answer every
   // time, which is what lets the editor re-score on every keystroke.
   const report = computeAtsReport(job, facts, tailored);
 
-  return { tailored, truth, report, repairAttempted, firstDraftViolations, traces };
+  return {
+    tailored,
+    truth,
+    report,
+    repairAttempted,
+    firstDraftViolations,
+    lengthRepairAttempted,
+    estimatedPages: length.pages,
+    traces,
+  };
 }

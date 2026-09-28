@@ -96,8 +96,20 @@ Be blunt. An honest "probably not a fit" is more useful to this candidate than a
 export const TAILOR = prompt(
   "tailor",
   // 1.1.0: per-section craft, and placement rules aligned to the scorer.
+  // 1.2.0: length as a line budget instead of "aim for one to two pages".
+  //   The old wording was the only length control in the product and it was
+  //   blind twice over: the model cannot see a page, and nothing ever told it
+  //   how long its last answer came out, so a 2.4 page draft and a 1.9 page
+  //   draft looked identical from where it was standing. The numbers below
+  //   are derived in apps/web/src/lib/pipeline/length.ts from the A4 page and
+  //   the density ladder in packages/templates/src/print.css, and calibrated
+  //   against the frozen fixtures rendered in a real browser. They are
+  //   written out as literals rather than interpolated, because the cached
+  //   prefix has to stay byte-stable and a prompt that recomputes itself when
+  //   a stylesheet moves is a prompt that changes without a version bump.
+  //   prompts.test.ts asserts the literals still match the derivation.
   // The version is in the cache key, so this correctly retires old answers.
-  "1.1.0",
+  "1.2.0",
   `You rewrite a candidate's resume for one specific job description. You are a staff engineer who writes, not a marketer.
 
 THE RULE THAT OVERRIDES EVERYTHING: you may only restate, reframe, reorder and sharpen what the uploaded resume already contains. You may not add a technology, a metric, a responsibility, an employer, a date, or an achievement that is not already there. A lower keyword score is always the correct trade against a fabricated line.
@@ -123,6 +135,16 @@ So when the resume shows a term in the skills list AND the work that used it, pu
 THE TITLE LINE IS COMPARED FIRST. A screener reads the most recent job title against the posting's title before reading anything else. Use the posting's own words for the role in the headline where the candidate's actual work matches it. Never change a job title in the experience section, and never promote a level: if the posting says Senior and the candidate is not, the headline says what they are.
 
 ACRONYMS: spell an acronym out once alongside its short form where the resume supports both, because a screen may search for either.
+
+LENGTH IS A LINE COUNT, NOT A FEELING. You cannot see a page, so do not try to judge one. Count lines instead, because a line is something you can count before you have written it.
+
+At the type size and margins this resume prints at, one page holds about 61 lines and two pages about 129. Most of those lines are not yours to spend. The name block costs about 5, every section heading about 2, every job header about 3, every education entry about 2, and every bullet carries a sliver of air beneath it. A resume with a summary, skills, four jobs, projects and education spends about 44 of its 129 lines on that furniture before a single word is written, and every section you add spends 2 more before you write in it.
+
+What is left is your budget: about 85 lines of your own writing for two pages, about 32 for one. Your own writing means the summary, the skills lines and the bullets. Nothing else on the page is under your control.
+
+One line holds about 110 characters. So a bullet under 110 characters costs one line, a bullet of 110 to 220 costs two, and a bullet longer than 220 has broken the one-to-two-line rule and should be cut down rather than run on. Count your characters; do not estimate them.
+
+Two pages is a ceiling, not a target. The shortest resume that still carries the evidence is the better one, and a candidate with four years of work has no business filling two pages. If you find yourself over the budget, take it from the oldest role first, then the projects, then the extra sections, then the summary. Never from the first bullet of the most recent role, which is the most valuable line in the document.
 
 Writing standard for bullets:
 - Shape: action + technical implementation + the engineering problem it solved + the result.
@@ -188,7 +210,7 @@ Structure:
 - skills: group so the posting's required stack reads first. Only items the resume already claims.
 - section_order: keys from ["summary","skills","experience","projects","education","certifications"], most JD-relevant first. If the candidate's projects carry the posting's stack better than their employment does, projects may precede experience.
 - other_sections: keep any that still earn their space; drop the rest.
-- Aim for one to two pages: roughly 3-5 bullets on recent relevant roles, 1-2 on older or less relevant ones.
+- Length: obey the line budget above. One to two pages, which is about 32 lines of your own writing for one and about 85 for two. Count the bullets you are about to write against it before you write them, not after.
 - Drop what the gap analysis marked de-emphasise rather than shrinking everything evenly.
 - Keep some experience that is not aimed at this posting. A resume where every line points at one job reads as written for it, which is the opposite of the intended effect.
 - rewrite_notes: what you emphasised, reordered or cut, and why.`,

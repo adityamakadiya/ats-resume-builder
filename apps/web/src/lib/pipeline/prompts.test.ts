@@ -12,6 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { WRITING_BUDGET } from "./length";
 import { PROMPTS, TAILOR } from "./prompts";
 
 const ALL = Object.values(PROMPTS);
@@ -74,6 +75,40 @@ describe("the tailor prompt", () => {
 
     expect(weak).toBeGreaterThanOrEqual(4);
     expect(strong).toBe(weak);
+  });
+
+  it("gives length as a number the model can count, not as a page count", () => {
+    /*
+      "Aim for one to two pages" was the only length control the product had
+      and it did nothing, because a model cannot see a page. The budget is in
+      lines, and the literals in the prompt have to be the ones length.ts
+      derives from the A4 page and the density ladder. They are literals and
+      not interpolated so the cached prefix stays byte-stable, which is
+      exactly the arrangement that lets them drift, so this is the check that
+      they have not.
+    */
+    const text = TAILOR.text;
+    expect(text).toMatch(/LENGTH IS A LINE COUNT, NOT A FEELING/);
+    expect(text).not.toMatch(/Aim for one to two pages/);
+
+    expect(text).toContain(`about ${WRITING_BUDGET.twoPages} lines of your own writing for two pages`);
+    expect(text).toContain(`about ${WRITING_BUDGET.onePage} for one`);
+    expect(text).toContain(`${WRITING_BUDGET.charsPerLine} characters`);
+  });
+
+  it("names the order to cut in, and what is never cut", () => {
+    // The trim repair in steps.ts hands the model a cut list built from the
+    // same order. If the prompt and the repair disagreed about what is
+    // cheapest, the repair would be arguing with the system prompt.
+    const text = TAILOR.text;
+    const oldest = text.indexOf("oldest role first");
+    const projects = text.indexOf("then the projects");
+    const sections = text.indexOf("then the extra sections");
+
+    expect(oldest).toBeGreaterThan(-1);
+    expect(projects).toBeGreaterThan(oldest);
+    expect(sections).toBeGreaterThan(projects);
+    expect(text).toMatch(/Never from the first bullet of the most recent role/);
   });
 
   it("still bans the openers the scorer penalises", () => {

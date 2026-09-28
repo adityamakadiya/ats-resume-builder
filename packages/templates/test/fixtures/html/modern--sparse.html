@@ -21,6 +21,19 @@
    2. Nothing is hardcoded. Every size, gap and leading comes from a custom
       property set by the density ladder below, so fitting a page is a single
       attribute change and never a per-template edit.
+
+   Known defect, not fixed here, because fixing it is a redesign rather than
+   a rule: rule 1 gives the margin to `.rz` as padding, and a fragmented box
+   paints its padding-top on the first fragment only. So page one of a
+   printed resume starts 52.6pt down the sheet and page two starts at 0.5pt,
+   with the text running into the unprintable edge on every sheet after the
+   first. Measured with pymupdf on standard--long. Moving the margin to
+   `@page` would fix it and would also take the page padding out of reach of
+   the density ladder, which sets it per rung on an element `@page` cannot
+   see, and would stop Modern's sidebar panel bleeding to the paper edge.
+   That is a decision about the templates, not about this stylesheet. The
+   break-quality suites model the behaviour rather than assert it away, so
+   they will keep telling the truth either way.
    ========================================================================= */
 
 @page {
@@ -246,7 +259,17 @@
   border-bottom: 0.6pt solid var(--rule-strong);
   margin-bottom: calc(var(--gap-head) * 1.1);
 
-  /* A heading is never the last thing on a page. */
+  /* A heading is never the last thing on a page.
+
+     This rule alone is weaker than it reads. `break-after: avoid` only
+     promises that *something* from the next block starts on the same page,
+     and a section body is usually several independent blocks, so Chromium
+     satisfies it by dragging exactly one of them across. That is how SKILLS
+     printed on page 2 of standard--long with only "Languages" under it and
+     the other three groups overleaf: the rule was doing its job and the job
+     was not enough. The widow rules further down, on the first unit of each
+     kind of section body, are what actually keeps a heading with a useful
+     amount of its own section. */
   break-after: avoid;
   page-break-after: avoid;
   break-inside: avoid;
@@ -260,7 +283,22 @@
 /* ---------------------------------------------------------------- entry -- */
 
 /* A role is one unit of meaning. Splitting it across a page break makes the
-   bullets look like they belong to the next employer. */
+   bullets look like they belong to the next employer.
+
+   This is kept, and it is not free: it is why page 1 of standard--long stops
+   at 77 percent of the sheet. The whole Braysend Retail block will not fit in
+   what is left, so the whole block moves. The e2e break-quality suite is
+   written to allow exactly that and no more: a page may end early only when
+   the block that starts the next page could not have fitted in the space
+   left behind. A page that ends early with room to spare is a real defect and
+   fails.
+
+   `break-inside: avoid` is a request, not a guarantee. Chromium drops it the
+   moment the block is taller than a page, which a role with a dozen bullets
+   at density 0 can be, and then the role breaks wherever it likes. The
+   heading and bullet rules below are the fallback for that case, so the split
+   is at least typographically sane rather than a title alone at the foot of
+   the page. */
 .rz-entry {
   break-inside: avoid;
   page-break-inside: avoid;
@@ -277,6 +315,16 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 1em;
+
+  /* An employer, its dates and its location are one heading in three pieces,
+     and none of them may be the last thing on a page. Without this, a role
+     too tall for `break-inside: avoid` to hold together printed "Northvale
+     Systems / Apr 2022 - Present" at the foot of one page and every one of
+     its bullets on the next, which reads as a job with nothing to show for
+     it. */
+  break-after: avoid;
+  page-break-after: avoid;
+  break-inside: avoid;
 }
 
 .rz-entry-title {
@@ -294,6 +342,12 @@
   margin-top: calc(var(--gap-line) * 0.5);
   font-size: var(--t-meta);
   color: var(--ink-mute);
+
+  /* The second line of the heading. It is welded to the first by the rule
+     above and to the bullets by the rule below, so the three-piece heading
+     cannot be broken up. */
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 .rz-dates {
@@ -318,6 +372,12 @@
   list-style: disc outside;
   margin-top: var(--gap-head);
   padding-left: 1.05em;
+
+  /* The list belongs to the heading above it. Without this the break can
+     land in the margin between them, which puts the role title alone at the
+     bottom of the page. */
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 .rz .rz-bullets > li {
@@ -329,6 +389,37 @@
 
 .rz .rz-bullets > li:first-child {
   margin-top: 0;
+}
+
+/* Widow and orphan control for the list itself, which `orphans` and `widows`
+   cannot do: those count line boxes inside one block, and each bullet is its
+   own block.
+
+   One bullet alone under a heading looks like the role had one thing to say
+   and the rest got lost; one bullet alone at the top of the next page looks
+   like it belongs to whatever heading follows it. Forbidding a break after
+   the first item and before the last means any split carries at least two
+   bullets to each side, and a two-bullet list cannot split at all, because
+   both rules forbid its only breakpoint and Chromium then moves the break
+   back to before the entry.
+
+   The `:not()` halves are load-bearing and were added after the e2e suite
+   caught what they prevent. Written as a bare `:first-child`, the rule also
+   matches the only item of a one-bullet list, and `break-after: avoid` on
+   the last thing in an entry does not stay inside that entry: it forbids the
+   break between that entry and the next one. compact--long has three
+   one-bullet projects in a row, so the chain welded Slowhand, Costcut and
+   Runbookd into a single run and left 151px of page 2 empty to move a 44px
+   project. A one-item list needs neither rule, because the entry around it
+   is already atomic. */
+.rz .rz-bullets > li:first-child:not(:last-child) {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.rz .rz-bullets > li:last-child:not(:first-child) {
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 .rz .rz-bullets > li::marker {
@@ -346,6 +437,29 @@
   grid-template-columns: max-content 1fr;
   column-gap: 0.85em;
   row-gap: var(--gap-line);
+
+  /* The whole list moves or none of it does.
+
+     This is a blunter rule than the section deserves and it is here because
+     the precise one does not work. The intention was to let the list break
+     between groups but never inside one, and never immediately after the
+     first group, by putting `break-after: avoid` on the first row's dt and
+     dd. The selector matches, `getComputedStyle` reports `avoid` on both,
+     and Chromium ignores it: break-before and break-after on a grid item
+     are not implemented, so the fragmentainer still split standard--long
+     between "Languages" and "Platform" with the computed style asking it
+     not to. A rule that reads correctly and does nothing is worse than a
+     coarse rule that works, so the list is atomic instead.
+
+     Row-level control would need this to stop being a grid, and the grid is
+     what puts every category label in one optical column without table
+     markup. A skills list is four or five rows; making it atomic costs at
+     most those few lines of a page, which the break-quality suite measures
+     and allows. If a candidate ever has a skills list taller than a page,
+     Chromium drops this request and falls back to breaking between rows,
+     which is where it would have broken anyway. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .rz-skill-row {
@@ -358,8 +472,25 @@
   break-inside: avoid;
 }
 
+/* There is no `break-after: avoid` on the grid's dt, and that is deliberate.
+
+   It was there, meaning "a category label is never printed without the list
+   it labels", and it did the opposite of nothing. Chromium ignores
+   break-after between two grid rows, as the note on `.rz-skills` records,
+   but it does honour it on the *last* grid item, where it propagates to the
+   container and forbids a break after the whole list. So the one place the
+   rule had any effect was the one place it was not wanted: it welded SKILLS
+   to PROJECTS, and standard--threepage then left 236px of page 2 empty to
+   move a 145px skills section that fitted perfectly well. The e2e fit check
+   is what found it.
+
+   The grid does not need the rule anyway: `break-inside: avoid` on the list
+   already keeps every label with its values. The stacked variant does need
+   it, is real block layout, and gets it below. */
+
 .rz-skills dd {
   color: var(--ink-soft);
+  break-inside: avoid;
 }
 
 /* Each category is wrapped in a .rz-skill-row so the pair stays together
@@ -375,10 +506,36 @@
    Stacked variant for a narrow column. */
 .rz-skills--stacked {
   display: block;
+
+  /* Block layout, so the row-level break control that the grid silently
+     drops is honoured here and the coarse rule is not needed. A sidebar
+     skills list is the tallest thing in Modern's left column and making it
+     atomic would push it wholesale onto page 2 with the column empty
+     behind it. */
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+/* Never a heading with one group under it, and never one group alone
+   overleaf. The grid cannot do this; block layout can. */
+.rz-skills--stacked .rz-skill-row:first-child dd {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.rz-skills--stacked .rz-skill-row:last-child dt {
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 .rz-skills--stacked dt {
   margin-top: var(--gap-head);
+
+  /* Safe here in a way it is not in the grid: a dt is always followed by its
+     own dd, never by the next section, so forbidding a break after it can
+     only keep a label with its values. */
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .rz-skills--stacked .rz-skill-row:first-child dt {
@@ -396,6 +553,10 @@
   color: var(--ink-soft);
   font-size: var(--t-meta);
   margin-top: calc(var(--gap-line) * 0.5);
+
+  /* An institution without its degree is not an education entry. */
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 .rz .rz-plain {
@@ -412,10 +573,28 @@
 .rz .rz-plain > li {
   margin-top: var(--gap-line);
   break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .rz .rz-plain > li:first-child {
   margin-top: 0;
+}
+
+/* Same widow and orphan rules as the bullets, including the `:not()` halves
+   and for the same reason. The case that made them necessary was smaller and
+   uglier than the bullets': compact--rich has exactly two certifications,
+   and it printed "AWS Certified Solutions Architect, Associate, 2024" as the
+   last line of page 1 with "Certified Kubernetes Application Developer, 2022"
+   alone at the top of page 2. A two-item list has one breakpoint, both of
+   these rules forbid it, and the pair now travels together. */
+.rz .rz-plain > li:first-child:not(:last-child) {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.rz .rz-plain > li:last-child:not(:first-child) {
+  break-before: avoid;
+  page-break-before: avoid;
 }
 
 /* =========================================================================

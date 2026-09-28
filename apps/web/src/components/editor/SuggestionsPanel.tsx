@@ -14,12 +14,22 @@
  * Keywords lead because they are cheaper and, on most documents, worth
  * more. The count on each tab is what makes that ordering safe: you can
  * see there is writing work waiting without being made to read it first.
+ *
+ * The cut list sits under the writing cards rather than in a tab of its
+ * own. It is the same question asked from the other end, "which of these
+ * lines is not earning its space", and a person who has just read that
+ * their bullets are weak is already halfway to deciding which one goes.
+ * It is also a separate section with its own heading and its own rule,
+ * because deleting a line and rewriting one are not the same act and a
+ * list that mixed them would get a deletion clicked by accident.
  */
 
 import { useMemo, useState } from "react";
 import type { AtsReport, GapAnalysis, JobSpec, Op, ResumeFacts } from "@ats/core";
 import type { ResumeDoc } from "@ats/templates";
 import { groupByLine, writingIssues } from "@/lib/editor/writing";
+import { cutsFor } from "@/lib/editor/trim";
+import { CutList } from "./CutList";
 import { SuggestionChips } from "./SuggestionChips";
 import { WritingCard } from "./WritingCard";
 
@@ -45,6 +55,8 @@ export function SuggestionsPanel({
   /** "I have used this" on a term with nothing behind it. */
   onAttest?: (term: string) => void;
 }) {
+  const [tab, setTab] = useState<Tab>("keywords");
+
   /*
     Recomputed on every document change, and that is affordable because
     the detector is pure string work with no scoring and no network in it.
@@ -53,11 +65,26 @@ export function SuggestionsPanel({
   */
   const lines = useMemo(() => groupByLine(writingIssues(doc)), [doc]);
 
+  /*
+    Not free, unlike the writing rules above: every candidate line is a
+    document copy and a full rescore, which is tens of scorer runs. That is
+    still milliseconds, but it is not keystroke work, so it is computed only
+    while the tab that shows it is open. `tab` is in the dependency list for
+    exactly that reason and not by accident.
+
+    Rendered whenever there is anything to cut. Wiring it to the real page
+    overflow signal is deliberately not done here: the fitter is being
+    rebuilt, and a panel that guessed at "does this fit" while the thing
+    that knows was changing underneath it would be wrong in both directions.
+  */
+  const cuts = useMemo(
+    () => (tab === "writing" ? cutsFor(job, facts, doc, report) : []),
+    [tab, job, facts, doc, report],
+  );
+
   const keywordCount = report
     ? report.missing_keywords.length + report.recoverable_keywords.length
     : 0;
-
-  const [tab, setTab] = useState<Tab>("keywords");
 
   return (
     <section aria-label="Suggestions">
@@ -117,6 +144,8 @@ export function SuggestionsPanel({
             </ul>
           </>
         )}
+
+        <CutList cuts={cuts} onApply={onApply} />
       </div>
     </section>
   );

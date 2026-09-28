@@ -179,13 +179,24 @@ export async function POST(request: Request) {
             // user most deserves to know what is happening and why.
             write.send({ t: "guard", passed: false, violations: [], repairing: true });
             write.send({ t: "step", step: "tailor", state: "start" });
+          } else if (event.type === "trimming") {
+            /*
+              The draft is too long to print, so it is being shortened
+              against a named cut list rather than rewritten. Marked as a
+              tailor step because that is what it is from the user's side:
+              another twenty seconds of the model working on their document.
+              Without this the stream stayed valid and the pause was silent,
+              which reads as the product having hung.
+            */
+            write.send({ t: "step", step: "tailor", state: "start" });
           }
         },
       });
 
-      if (outcome.repairAttempted) {
-        // `tailorResume` reports the repair's own draft and re-verification
-        // silently, so the second pair of brackets is closed here.
+      if (outcome.repairAttempted || outcome.lengthRepairAttempted) {
+        // `tailorResume` reports a repair's own draft and re-verification
+        // silently, whether it was the guard or the length that triggered
+        // it, so the second pair of brackets is closed here.
         write.send({ t: "step", step: "tailor", state: "done" });
         write.send({ t: "step", step: "guard", state: "start" });
         write.send({ t: "step", step: "guard", state: "done" });
